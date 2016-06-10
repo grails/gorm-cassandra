@@ -1,0 +1,17 @@
+dependencies {
+    compile "org.springframework.boot:spring-boot-cli:$springBootVersion", {
+        exclude group:'org.codehaus.groovy', module:'groovy'
+    }
+
+    compile "org.springframework.boot:spring-boot-autoconfigure:$springBootVersion"
+
+    compile "org.codehaus.groovy:groovy:$groovyVersion"
+    compile "org.grails:grails-datastore-gorm-support:$gormVersion", {
+        exclude group:'org.grails', module:'grails-datastore-gorm-plugin-support'
+    }
+    compile project(":grails-datastore-gorm-cassandra"), {
+        exclude group:'org.grails', module:'grails-datastore-gorm-plugin-support'
+    }
+
+    compile "org.springframework:spring-tx:$springVersion"
+}

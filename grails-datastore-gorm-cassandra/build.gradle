@@ -1,0 +1,116 @@
+
+dependencies {
+    compile("com.datastax.cassandra:cassandra-driver-core:2.0.4")
+    compile("org.springframework.data:spring-data-cassandra:1.0.4.RELEASE") {
+        exclude group:'org.apache.cassandra',module:'cassandra-all'
+	}
+	compile("org.apache.commons:commons-lang3:3.3.2")
+    compile("org.grails:grails-core:$grailsVersion") {
+        exclude group:'aopalliance',module:'aopalliance'
+        exclude group:'commons-logging',module:'commons-logging'
+        exclude group:'commons-lang',module:'commons-lang'
+        exclude group:'commons-collections',module:'commons-collections'
+        exclude group:'commons-io',module:'commons-io'
+        exclude group:'org.grails',module:'grails-spring'
+        exclude group:'org.grails',module:'grails-bootstrap'
+        exclude group:'org.aspectj',module:'aspectjweaver'
+        exclude group:'org.aspectj',module:'aspectjrt'
+        exclude group:'oro',module:'oro'
+        exclude group:'asm',module:'asm'
+        exclude group:'cglib',module:'cglib'
+        exclude group:'cglib', module:'cglib-nodep'
+        exclude group:'xalan',module:'serializer'
+        exclude group:'org.springframework',module:'spring-core'
+        exclude group:'org.springframework',module:'spring-tx'
+        exclude group:'org.springframework',module:'spring-aspects'
+        exclude group:'org.springframework',module:'spring-beans'
+        exclude group:'org.springframework',module:'spring-context'
+        exclude group:'org.springframework',module:'spring-expression'
+        exclude group:'org.springframework',module:'spring-web'
+        exclude group:'org.springframework',module:'spring-aop'
+        exclude group:'org.springframework',module:'spring-context-support'
+        exclude group:'commons-logging',module:'commons-logging'
+        exclude group:'commons-validator',module:'commons-validator'
+        exclude group:'com.googlecode.concurrentlinkedhashmap',module:'concurrentlinkedhashmap-lru'
+    }
+    compile("org.grails:grails-bootstrap:$grailsVersion") {
+        exclude group:'org.apache.ant',module:'ant'
+        exclude group:'org.apache.ant',module:'ant-launcher'
+        exclude group:'org.apache.ant',module:'ant-trax'
+        exclude group:'org.apache.ant',module:'ant-junit'
+        exclude group:'org.apache.ant',module:'ant'
+        exclude group:'org.apache.ivy',module:'ivy'
+        exclude group:'org.codehaus.gant',module:'gant_groovy1.8'
+        exclude group:'jline',module:'jline'
+        exclude group:'org.fusesource.jansi',module:'jansi'
+        exclude group:'net.java.dev.jna',module:'jna'
+    }
+
+    compile "org.grails:grails-datastore-gorm-validation:$gormVersion"
+    compile "org.grails:grails-datastore-gorm:$gormVersion",
+            "org.grails:grails-datastore-web:$gormVersion"
+
+    compile("org.grails:grails-datastore-gorm-support:$gormVersion") {
+        exclude group:'org.grails', module:'grails-datastore-gorm-hibernate-core'
+    }
+
+    testCompile "org.grails:grails-datastore-gorm-tck:$gormVersion"
+
+    testRuntime "org.objenesis:objenesis:1.4"
+    testCompile('cglib:cglib-nodep:2.2.2')
+
+	
+
+}
+
+test.doFirst {
+    def toBaseClassRelativePathWithoutExtension = { String base, String classFile ->
+        if (classFile.startsWith(base)) {
+            def sansClass = classFile[0 .. classFile.size() - ".class".size() - 1]
+            def dollarIndex = sansClass.indexOf('$')
+            def baseClass = dollarIndex > 0 ? sansClass[0..dollarIndex - 1] : sansClass
+            def relative = baseClass - base - '/'
+            relative
+        }
+        else {
+            null
+        }
+    }    
+    def tckClassesFile = project
+                            .configurations
+                            .testCompile
+                            .resolvedConfiguration
+                            .getResolvedArtifacts()
+                            .find { resolved ->
+                                resolved.moduleVersion.id.name == 'grails-datastore-gorm-tck'
+                            }.file
+
+    def tckClassesDir = project.file("${project.buildDir}/tck")                            
+    copy {
+        from zipTree(tckClassesFile)
+        into tckClassesDir 
+    }
+    copy {
+        from tckClassesDir
+        into sourceSets.test.output.classesDir
+        include "**/*.class"
+        exclude { details ->
+            // Do not copy across any TCK class (or nested classes of that class)
+            // If there is a corresponding source file in the particular modules
+            // test source tree. Allows a module to override a test/helper.
+
+            if (!details.file.isFile()) {
+                return false
+            }
+            def candidatePath = details.file.absolutePath
+            def relativePath = toBaseClassRelativePathWithoutExtension(tckClassesDir.absolutePath, candidatePath)
+
+            if (relativePath == null) {
+                throw new IllegalStateException("$candidatePath does not appear to be in the TCK")
+            }
+
+            project.file("src/test/groovy/${relativePath}.groovy").exists()
+        }
+    }
+}
+
