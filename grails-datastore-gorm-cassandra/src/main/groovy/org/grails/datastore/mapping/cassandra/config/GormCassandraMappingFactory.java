@@ -98,29 +98,6 @@ public class GormCassandraMappingFactory extends AbstractGormMappingFactory<Tabl
     }
 
     @Override
-    protected IdentityMapping getIdentityMappedForm(final ClassMapping classMapping, final Column property) {
-        if (property != null) {
-            final String name = property.getName();
-            if (name != null) {                
-                return new IdentityMapping() {
-                    public String[] getIdentifierName() {
-                        return new String[] { name };
-                    }
-
-                    public ClassMapping getClassMapping() {
-                        return classMapping;
-                    }
-
-                    public Property getMappedForm() {
-                        return property;
-                    }
-                };
-            }
-        }
-        return super.getIdentityMappedForm(classMapping, property);
-    }
-
-    @Override
     @SuppressWarnings("unchecked")
     public Identity<Column> createIdentity(PersistentEntity owner, MappingContext context, PropertyDescriptor pd) {
         final Table table = (Table) owner.getMapping().getMappedForm();
