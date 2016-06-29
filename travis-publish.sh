@@ -29,7 +29,52 @@ if [[ $TRAVIS_REPO_SLUG == "grails/gorm-cassandra" && $TRAVIS_PULL_REQUEST == 'f
   fi
   if [[ $EXIT_STATUS -eq 0 ]]; then
     echo "Publishing Successful."
-  fi
+
+    echo "Publishing Documentation..."
+    ./gradlew docs:docs
+
+    git config --global user.name "$GIT_NAME"
+    git config --global user.email "$GIT_EMAIL"
+    git config --global credential.helper "store --file=~/.git-credentials"
+    echo "https://$GH_TOKEN:@github.com" > ~/.git-credentials
+
+
+    git clone https://${GH_TOKEN}@github.com/grails/grails-data-mapping.git -b gh-pages gh-pages --single-branch > /dev/null
+    cd gh-pages
+
+    if [[ -n $TRAVIS_TAG ]]; then
+        version="$TRAVIS_TAG"
+        version=${version:1}
+
+         mkdir -p latest/cassandra
+         cp -r ../docs/build/docs/. ./latest/cassandra/
+         git add latest/cassandra/*
+
+        majorVersion=${version:0:4}
+        majorVersion="${majorVersion}x"
+
+        mkdir -p "$version/cassandra"
+        cp -r ../docs/build/docs/. "./$version/cassandra/"
+        git add "$version/cassandra/*"
+
+        mkdir -p "$majorVersion/cassandra"
+        cp -r ../docs/build/docs/. "./$majorVersion/cassandra/"
+        git add "$majorVersion/cassandra/*"
+
+    else
+        # If this is the master branch then update the snapshot
+        mkdir -p snapshot/cassandra
+        cp -r ../docs/build/docs/. ./snapshot/cassandra/
+
+        git add snapshot/cassandra/*
+    fi
+
+
+    git commit -a -m "Updating Cassandra Docs for Travis build: https://travis-ci.org/$TRAVIS_REPO_SLUG/builds/$TRAVIS_BUILD_ID"
+    git push origin HEAD
+    cd ../../..
+    rm -rf gh-pages
+  fi 
   
 fi
 
