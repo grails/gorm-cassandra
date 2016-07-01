@@ -69,7 +69,7 @@ public class Table extends Entity {
 		return sort;
 	}
 
-	public void setSort(Object sort) {
+	public Table setSort(Object sort) {
 		if (sort instanceof Query.Order) {
 			this.sort = (Query.Order) sort;
 		}
@@ -87,6 +87,8 @@ public class Table extends Entity {
 		} else {
 			this.sort = Query.Order.asc(sort.toString());
 		}
+
+		return this;
 	}	
 
 	public Map<String, Object> getTableProperties() {
