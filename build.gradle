@@ -16,7 +16,7 @@ buildscript {
 
 
 group "org.grails"
-version "6.0.0.BUILD-SNAPSHOT"
+version "6.0.0.RELEASE"
 println "GORM VERSION = ${project.gormVersion}"
 
 ext {
@@ -107,13 +107,6 @@ subprojects { project ->
                 cacheChangingModulesFor 0, 'hours'
             }
         }        
-    }
-
-    if(isPluginProject) {
-        group "org.grails.plugins"
-    }
-    else {
-        group "org.grails"        
     }
 
     if(project.name == 'docs') {
