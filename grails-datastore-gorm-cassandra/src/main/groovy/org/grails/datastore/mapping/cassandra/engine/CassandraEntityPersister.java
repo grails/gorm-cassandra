@@ -690,4 +690,10 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 			}
 		}
 	}
+
+	@Override
+	public Object proxy(Serializable key) {
+		PersistentEntity entity = getPersistentEntity();
+		return getProxyFactory().createProxy(session, entity.getJavaClass(), key);
+	}
 }
