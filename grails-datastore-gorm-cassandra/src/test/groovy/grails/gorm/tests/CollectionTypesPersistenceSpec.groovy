@@ -17,7 +17,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
         given:
             def list = [1,2,3]            
             def set = ["one", "two", "three"] as Set
-            def map = [a:1, b:2.5f, z:3l]
+            def map = [a:1.1f, b:2.5f, z:3.0f]
             def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
         when:
             ct.save(flush:true)
@@ -75,7 +75,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		given:
             def list = [1,2,3]            
             def set = ["one", "two", "three"] as Set
-            def map = [a:1, b:2.5f, z:3l]
+            def map = [a:1.1f, b:2.5f, z:3.0f]
             def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)        
             ct.save(flush:true)
             ct.discard()
@@ -103,7 +103,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		given:
 			def list = [1,2,3]
 			def set = ["one", "two", "three"] as Set
-			def map = [a:1, b:2.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, z:3.0f]
 			def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
 			ct.save(flush:true)
 			ct.discard()
@@ -124,7 +124,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		
 		when:
     		def set2 = ["four", "five", "six"] as Set
-    		def map2 = [e:2, f:5.5f, g:5l]
+    		def map2 = [e:2.0f, f:5.5f, g:5.0f]
 			CollectionTypes.updateProperty(ct.id, "set", set2)
 			CollectionTypes.updateProperty(ct.id, "map", map2, [flush:true])
 			ct.discard()
@@ -139,7 +139,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		given:
     		def list = [1,2,3]
     		def set = ["one", "two", "three"] as Set
-    		def map = [a:1, b:2.5f, z:3l]
+    		def map = [a:1, b:2, z:3]
     		def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
     		ct.save(flush:true)
     		ct.discard()
@@ -147,7 +147,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
     		
     	when:
     		def list2 = [4,5,6]
-			def map2 = [e:2, f:5.5f, g:5l]
+			def map2 = [e:2.2f, f:5.5f, g:5.0f]
     		CollectionTypes.updateProperties(ct.id, [string: "2", list: list2, map: map2], [flush:true])
     		ct.discard()
     		ct = CollectionTypes.get(ct.id)
@@ -175,7 +175,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 			[a:1] == ct.map	
 			
     	when: "test instance collections updated"
-			ct = new CollectionTypes(string: "1", i:2, list: [1,2,3], map: [a:1, b:2.5f, z:3l], set:["one", "two", "three"] as Set)
+			ct = new CollectionTypes(string: "1", i:2, list: [1,2,3], map: [a:1.1f, b:2.5f, z:3.0f], set:["one", "two", "three"] as Set)
 			ct.save(flush:true)
 			ct.discard()
     		ct.appendToList(4)  
@@ -186,7 +186,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
     	then:    		
 			def list = [1,2,3,4]		
 			def set = ["one", "two", "three", "four"] as Set
-			def map = [a:1, b:2.5f, e:5.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, e:5.5f, z:3.0f]
     		
     		list == ct.list 
 			set == ct.set
@@ -210,8 +210,8 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 			list += [5,6,7,8]
 			CollectionTypes.appendToSet([id: ct.id], ["five", "six"] as Set)
 			set += ["five", "six"]
-			CollectionTypes.appendToMap([id: ct.id], [f:10l, g: 11], [flush:true])
-			map << [f:10l, g: 11]
+			CollectionTypes.appendToMap([id: ct.id], [f:10.0f, g: 11.1f], [flush:true])
+			map << [f:10.0f, g: 11.1f]
 			ct.discard()
 			ct = CollectionTypes.get(ct.id)			
 			
@@ -227,8 +227,8 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 			list << 9
 			ct.appendToSet("seven")
 			set << "seven"
-			ct.appendToMap([j:5], [flush:true])
-			map << [j:5]
+			ct.appendToMap([j:5.0f], [flush:true])
+			map << [j:5.0f]
 		
 		then:
 			list == ct.list
@@ -249,7 +249,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		when: "test instance collections updated"
 			def list = [1,2,3]
 			def set = ["one", "two", "three"] as Set
-			def map = [a:1, b:2.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, z:3.0f]
 			ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
 			ct.save(flush:true)
 			ct.discard()				
@@ -274,7 +274,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		when: "test static methods"
 			ct.prependToList(9, [flush:true])
 			CollectionTypes.prependToList(ct.id, 6, [flush:true])
-			CollectionTypes.prependToList([id: ct.id], [5,0], [flush:true])
+			CollectionTypes.prependToList([id: ct.id], [0,5], [flush:true])
 			ct.discard()
 			ct = CollectionTypes.get(ct.id)
 			
@@ -302,7 +302,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		given:
 			def list = [1,2,3]
 			def set = ["one", "two", "three"] as Set
-			def map = [a:1, b:2.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, z:3.0f]
 			def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
 			ct.save(flush:true)
 			ct.discard()
@@ -356,7 +356,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		given:
 			def list = [1,2,3]
 			def set = ["one", "two", "three", "four"] as Set
-			def map = [a:1, b:2.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, z:3.0f]
 			def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
 			ct.save(flush:true)
 			ct.discard()
@@ -370,7 +370,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		then:
 			def list2 = [2,3] 
 			def set2 = ["one", "three", "four"] as Set
-			def map2 = [a:1, z:3l]
+			def map2 = [a:1.1f, z:3.0f]
 			list2 == ct.list
 			set2 == ct.set
 			map2 == ct.map
@@ -397,14 +397,14 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 			ct			
 			null == ct.list
 			["one"] as Set == ct.set 
-			[a:1] == ct.map 			
+			[a:1.1f] == ct.map
 	}
 	
 	void "Test collection deleteAtFrom methods"() {
 		given:
 			def list = [1,2,3]
 			def set = ["one", "two", "three", "four"] as Set
-			def map = [a:1, b:2.5f, z:3l]
+			def map = [a:1.1f, b:2.5f, z:3.0f]
 			def ct = new CollectionTypes(string: "1", i:2, list: list, map: map, set:set)
 			ct.save(flush:true)
 			ct.discard()

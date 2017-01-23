@@ -1,5 +1,6 @@
 package org.grails.datastore.gorm.cassandra.mapping;
 
+import com.datastax.driver.core.querybuilder.Insert;
 import org.grails.datastore.mapping.model.types.BasicTypeConverterRegistrar;
 import org.grails.datastore.mapping.model.types.conversion.StringToCurrencyConverter;
 import org.grails.datastore.mapping.model.types.conversion.StringToLocaleConverter;
@@ -12,7 +13,10 @@ import org.springframework.data.cassandra.mapping.CassandraMappingContext;
 import org.springframework.data.cassandra.mapping.CassandraPersistentEntity;
 import org.springframework.data.cassandra.mapping.CassandraPersistentProperty;
 import org.springframework.data.convert.EntityInstantiator;
-import org.springframework.data.mapping.model.BeanWrapper;
+import org.springframework.data.mapping.PersistentProperty;
+import org.springframework.data.mapping.PersistentPropertyAccessor;
+import org.springframework.data.mapping.PropertyHandler;
+import org.springframework.data.mapping.model.ConvertingPropertyAccessor;
 import org.springframework.data.mapping.model.DefaultSpELExpressionEvaluator;
 import org.springframework.data.mapping.model.SpELExpressionEvaluator;
 
@@ -53,11 +57,68 @@ public class MappingCassandraConverter extends org.springframework.data.cassandr
         EntityInstantiator instantiator = instantiators.getInstantiatorFor(entity);
         S instance = instantiator.createInstance(entity, parameterProvider);
 
-        BeanWrapper<S> wrapper = BeanWrapper.create(instance, conversionService);
 
-        readPropertiesFromRow(entity, rowValueProvider, wrapper);
+        PersistentPropertyAccessor accessor = instance instanceof PersistentPropertyAccessor
+                ? (PersistentPropertyAccessor) instance : entity.getPropertyAccessor(instance);
 
-        return wrapper.getBean();
+
+        readPropertiesFromRow(entity, rowValueProvider, new ConvertingPropertyAccessor(accessor, conversionService) {
+            @Override
+            public void setProperty(PersistentProperty<?> property, Object value) {
+                Class actualType = property.getTypeInformation().getType();
+                if(actualType.isEnum() && (value instanceof CharSequence)) {
+                    super.setProperty(property, conversionService.convert(value, actualType));
+                }
+                else {
+                    super.setProperty(property, value);
+                }
+            }
+        } );
+
+        return (S) accessor.getBean();
+    }
+
+    @Override
+    protected void writeInsertFromWrapper(final ConvertingPropertyAccessor accessor, final Insert insert,
+                                          final CassandraPersistentEntity<?> entity) {
+
+        entity.doWithProperties(new PropertyHandler<CassandraPersistentProperty>() {
+
+            @Override
+            public void doWithPersistentProperty(CassandraPersistentProperty prop) {
+
+                Object value = accessor.getProperty(prop, prop.getType());
+
+                if(log.isDebugEnabled()) {
+                    log.debug("prop.type -> " + prop.getType().getName());
+                    log.debug("prop.value -> " + value);
+                }
+
+                if(prop.getDataType().equals(DataType.text()) && !CharSequence.class.isAssignableFrom(prop.getType())) {
+                    value = conversionService.convert(value, String.class);
+                }
+
+                if (prop.isCompositePrimaryKey()) {
+                    if(log.isDebugEnabled()) {
+                        log.debug("prop is a compositeKey");
+                    }
+                    PersistentPropertyAccessor accessor = value instanceof PersistentPropertyAccessor
+                            ? (PersistentPropertyAccessor) value : prop.getCompositePrimaryKeyEntity().getPropertyAccessor(value);
+
+                    accessor = new ConvertingPropertyAccessor(accessor, conversionService);
+                    writeInsertFromWrapper((ConvertingPropertyAccessor) accessor, insert,
+                            prop.getCompositePrimaryKeyEntity());
+                    return;
+                }
+
+                if (value != null) {
+                    if(log.isDebugEnabled()) {
+                        log.debug(String.format("Adding insert.value [%s] - [%s]", prop.getColumnName().toCql(), value));
+                    }
+                    insert.value(prop.getColumnName().toCql(), value);
+                }
+            }
+        });
     }
 
     /**

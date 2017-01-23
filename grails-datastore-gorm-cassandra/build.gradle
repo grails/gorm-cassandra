@@ -1,9 +1,6 @@
 
 dependencies {
-    compile("com.datastax.cassandra:cassandra-driver-core:2.0.4")
-    compile("org.springframework.data:spring-data-cassandra:1.0.4.RELEASE") {
-        exclude group:'org.apache.cassandra',module:'cassandra-all'
-	}
+    compile("org.springframework.data:spring-data-cassandra:1.4.5.RELEASE")
 	compile("org.apache.commons:commons-lang3:3.3.2")
     compile("org.grails:grails-core:$grailsVersion") {
         exclude group:'aopalliance',module:'aopalliance'

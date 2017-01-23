@@ -25,6 +25,10 @@ class Setup {
     static String keyspace = "unittest"
 
     static destroy() {
+//        if(cassandraDatastore != null) {
+//            cassandraDatastore.destroy()
+//            cassandraDatastore = null
+//        }
     }
 
     static boolean catchException(def block) {
@@ -59,6 +63,7 @@ class Setup {
                 entities << cassandraDatastore.mappingContext.addPersistentEntity(cls)
             }
 
+
             PersistentEntity entity = cassandraDatastore.mappingContext.persistentEntities.find { PersistentEntity e -> e.name.contains("TestEntity")}
 
             cassandraDatastore.mappingContext.addEntityValidator(entity, [
@@ -70,9 +75,6 @@ class Setup {
                 }
             ] as Validator)
                                                                 
-            cassandraDatastore.applicationContext.addApplicationListener new DomainEventListener(cassandraDatastore)
-            cassandraDatastore.applicationContext.addApplicationListener new AutoTimestampEventListener(cassandraDatastore)
-            
             cassandraDatastore.afterPropertiesSet()
 			
 			this.cassandraDatastore = cassandraDatastore
@@ -82,20 +84,16 @@ class Setup {
 			}
 			cassandraAdminTemplate = new CassandraAdminTemplate(cassandraDatastore.nativeSession, cassandraDatastore.cassandraTemplate.cassandraConverter)
         }
-		
-		for (cls in additionalClasses) {
-			if (!cassandraDatastore.mappingContext.isPersistentEntity(cls)) {
-				cassandraDatastore.mappingContext.addPersistentEntity(cls)
-				cassandraDatastore.createTableDefinition(cls)				
-			}
-		}
-		
-        def txMgr = new DatastoreTransactionManager(datastore: cassandraDatastore)
 
-        CassandraGormEnhancer enhancer = new CassandraGormEnhancer(cassandraDatastore, txMgr)
-        enhancer.enhance()
-
-        def cassandraSession = cassandraDatastore.connect()     
+        if(additionalClasses) {
+            for (cls in additionalClasses) {
+                if (!cassandraDatastore.mappingContext.isPersistentEntity(cls)) {
+                    cassandraDatastore.mappingContext.addPersistentEntity(cls)
+                }
+            }
+        }
+        cassandraDatastore.enhanceAll()
+        def cassandraSession = cassandraDatastore.connect()
         truncateAllEntities()
                
         return cassandraSession

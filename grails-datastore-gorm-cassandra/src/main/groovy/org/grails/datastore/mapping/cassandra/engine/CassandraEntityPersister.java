@@ -17,6 +17,8 @@ package org.grails.datastore.mapping.cassandra.engine;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.set;
 import static org.springframework.data.cassandra.repository.support.BasicMapId.id;
+
+import com.datastax.driver.core.*;
 import groovy.lang.MissingPropertyException;
 
 import java.io.Serializable;
@@ -64,10 +66,6 @@ import org.springframework.data.cassandra.mapping.CassandraPersistentEntity;
 import org.springframework.data.cassandra.mapping.CassandraPersistentProperty;
 import org.springframework.data.mapping.PropertyHandler;
 
-import com.datastax.driver.core.ResultSet;
-import com.datastax.driver.core.Row;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.querybuilder.Delete;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Update;
@@ -416,6 +414,9 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 		CassandraPersistentProperty persistentProperty = getPersistentProperty(springCassandraPersistentEntity, propertyName);
 		String columnName = getPropertyName(persistentProperty);
 		item = convertPrimitiveToNative(item, persistentProperty, conversionService);
+		if(persistentProperty.getDataType().equals(DataType.text()) && !String.class.isAssignableFrom(persistentProperty.getType())) {
+			item = conversionService.convert(item, String.class);
+		}
 		update.with(set(columnName, item));
 		return prepareUpdate(id, update, writeOptions);		
 	}

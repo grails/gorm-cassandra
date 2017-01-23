@@ -4,14 +4,18 @@ import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.net.URL;
-import java.util.Calendar;
-import java.util.Currency;
-import java.util.Locale;
-import java.util.TimeZone;
+import java.util.*;
 
 import grails.core.GrailsDomainClassProperty;
 import org.grails.datastore.mapping.cassandra.config.CassandraMappingContext;
+import org.grails.datastore.mapping.cassandra.config.Table;
+import org.grails.datastore.mapping.model.DatastoreConfigurationException;
+import org.grails.datastore.mapping.model.IllegalMappingException;
 import org.grails.datastore.mapping.model.PersistentEntity;
+import org.springframework.cassandra.core.keyspace.CreateTableSpecification;
+import org.springframework.cassandra.core.keyspace.DefaultOption;
+import org.springframework.cassandra.core.keyspace.Option;
+import org.springframework.cassandra.core.keyspace.TableOption;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.cassandra.mapping.BasicCassandraPersistentProperty;
 import org.springframework.data.cassandra.mapping.CassandraPersistentEntity;
@@ -30,6 +34,12 @@ import org.springframework.validation.Errors;
  */
 public class BasicCassandraMappingContext extends org.springframework.data.cassandra.mapping.BasicCassandraMappingContext {
 
+	private static final Map<String, Class<? extends Enum>> KEY_TO_OPTION = new LinkedHashMap<String, Class<? extends Enum>>() {{
+		put("CACHING", TableOption.CachingOption.class);
+		put("COMPACTION", TableOption.CompactionOption.class);
+		put("COMPRESSION", TableOption.CompressionOption.class);
+	}};
+
 	public static final String INTERNAL_MARKER = "$";
 	public static final String INTERNAL_GRAILS_FIELD_MARKER = "org_grails";
 	CassandraMappingContext gormCassandraMappingContext;
@@ -44,6 +54,59 @@ public class BasicCassandraMappingContext extends org.springframework.data.cassa
 			return super.addPersistentEntity(typeInformation);
 		}
 		return null;
+	}
+
+	@Override
+	public CreateTableSpecification getCreateTableSpecificationFor(CassandraPersistentEntity<?> entity) {
+		CreateTableSpecification tableSpecification = super.getCreateTableSpecificationFor(entity);
+		PersistentEntity gormEntity = gormCassandraMappingContext.getPersistentEntity(entity.getName());
+		Table table = (Table) gormEntity.getMapping().getMappedForm();
+
+		Map<String, Object> tableProperties = table.getTableProperties();
+		if(tableProperties != null && !tableProperties.isEmpty()) {
+			for (Map.Entry<String, Object> option : tableProperties.entrySet()) {
+				String k = option.getKey();
+				String optionName = resolveOptionName(k);
+				Object value = option.getValue();
+				try {
+					TableOption to = TableOption.valueOf(optionName);
+					if(value instanceof Boolean) {
+						if((Boolean) value) {
+							tableSpecification.with(to);
+						}
+					}
+					else if(value instanceof Map) {
+						Map mapValue = (Map) value;
+						if(KEY_TO_OPTION.containsKey(optionName)) {
+							Class<? extends Enum> enumClass = KEY_TO_OPTION.get(optionName);
+							for (Object key : new HashSet<>(mapValue.keySet())) {
+								String subOption = resolveOptionName(key.toString());
+								try {
+									Enum subopt = Enum.valueOf(enumClass, subOption);
+									Object v = mapValue.get(key);
+									mapValue.remove(key);
+									mapValue.put(subopt, v);
+								} catch (Exception e) {
+									throw new IllegalMappingException("Invalid ["+optionName+"] option ["+ key +"] for parent option ["+key+"] for entity ["+ entity.getName() +"]: " + e.getMessage());
+								}
+							}
+						}
+						tableSpecification.with(to, mapValue);
+					}
+					else {
+						tableSpecification.with(to, value);
+					}
+				} catch (Throwable e) {
+					throw new IllegalMappingException("Invalid table option ["+ k +"] for entity ["+ entity.getName() +"]: " + e.getMessage());
+				}
+			}
+		}
+
+		return tableSpecification;
+	}
+
+	private String resolveOptionName(String k) {
+		return k.toUpperCase().replace(' ', '_');
 	}
 
 	@Override
@@ -88,10 +151,6 @@ public class BasicCassandraMappingContext extends org.springframework.data.cassa
 					return CassandraSimpleTypeHolder.getDataTypeFor(String.class);
 				};
 
-				public java.lang.Class<?> getType() {
-					return String.class;
-				};
-
 				public boolean usePropertyAccess() {
 					return true;
 				};
@@ -101,10 +160,6 @@ public class BasicCassandraMappingContext extends org.springframework.data.cassa
 			return new BasicCassandraPersistentProperty(field, descriptor, owner, (CassandraSimpleTypeHolder) simpleTypeHolder) {
 				public com.datastax.driver.core.DataType getDataType() {
 					return CassandraSimpleTypeHolder.getDataTypeFor(String.class);
-				};
-
-				public java.lang.Class<?> getType() {
-					return String.class;
 				};
 
 				public boolean isEntity() {

@@ -36,7 +36,7 @@ class CommonTypes implements Serializable {
 		id name:"primary"
         timeuuid type:"timeuuid"
         ascii type:'ascii'
-        varchar type:'varchar'               
+        varchar type:'text'
     }
     
     static transients = [

@@ -209,6 +209,7 @@ class NamedQuerySpec extends GormDatastoreSpec {
             0 == results?.size()
     }
 
+    @Ignore
     void "Test get method followed named query chaining"() {
         given:
             def now = new Date()

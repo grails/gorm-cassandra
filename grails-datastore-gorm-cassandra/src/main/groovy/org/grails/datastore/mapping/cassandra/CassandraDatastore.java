@@ -16,16 +16,26 @@ package org.grails.datastore.mapping.cassandra;
 
 
 import com.datastax.driver.core.Cluster;
+import org.grails.datastore.gorm.cassandra.CassandraGormEnhancer;
 import org.grails.datastore.gorm.cassandra.mapping.BasicCassandraMappingContext;
 import org.grails.datastore.gorm.cassandra.mapping.MappingCassandraConverter;
 import org.grails.datastore.gorm.cassandra.mapping.TimeZoneToStringConverter;
+import org.grails.datastore.gorm.events.AutoTimestampEventListener;
+import org.grails.datastore.gorm.events.ConfigurableApplicationContextEventPublisher;
+import org.grails.datastore.gorm.events.ConfigurableApplicationEventPublisher;
+import org.grails.datastore.gorm.events.DomainEventListener;
+import org.grails.datastore.gorm.validation.listener.ValidationEventListener;
 import org.grails.datastore.mapping.cassandra.config.CassandraMappingContext;
+import org.grails.datastore.mapping.cassandra.config.GormCassandraSessionFactoryBean;
 import org.grails.datastore.mapping.cassandra.utils.EnumUtil;
 import org.grails.datastore.mapping.core.AbstractDatastore;
+import org.grails.datastore.mapping.core.DatastoreException;
 import org.grails.datastore.mapping.core.Session;
 import org.grails.datastore.mapping.model.DatastoreConfigurationException;
 import org.grails.datastore.mapping.model.MappingContext;
 import org.grails.datastore.mapping.model.PersistentEntity;
+import org.grails.datastore.mapping.transactions.DatastoreTransactionManager;
+import org.grails.datastore.mapping.transactions.TransactionCapableDatastore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -42,285 +52,337 @@ import org.springframework.core.env.PropertyResolver;
 import org.springframework.data.cassandra.config.SchemaAction;
 import org.springframework.data.cassandra.core.CassandraAdminTemplate;
 import org.springframework.data.cassandra.core.CassandraTemplate;
+import org.springframework.data.cassandra.mapping.CassandraPersistentEntity;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.util.Assert;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.*;
 import java.util.Map.Entry;
 
 /**
  * A Datastore implementation for Cassandra. Uses Spring Data Cassandra Factory
  * beans to create and initialise the Cassandra driver cluster and session
- *
  */
-@SuppressWarnings({ "unchecked", "rawtypes" })
-public class CassandraDatastore extends AbstractDatastore implements InitializingBean, DisposableBean, MappingContext.Listener {
+@SuppressWarnings({"unchecked", "rawtypes"})
+public class CassandraDatastore extends AbstractDatastore implements TransactionCapableDatastore, InitializingBean, DisposableBean, Closeable, MappingContext.Listener {
 
-	public static final String WRITE_OPTIONS = "writeOptions";
-	private static Logger log = LoggerFactory.getLogger(CassandraDatastore.class);
-	// TODO make one keyspace for each session somehow, maybe just do a
-	// different datastore instance?
-	public static final String DEFAULT_KEYSPACE = "CassandraKeySpace";
-	public static final SchemaAction DEFAULT_SCHEMA_ACTION = SchemaAction.NONE;
-	public static final String CONTACT_POINTS = "grails.cassandra.contactPoints";
-	public static final String PORT = "grails.cassandra.port";
-	public static final String SCHEMA_ACTION = "grails.cassandra.dbCreate";
-	public static final String KEYSPACE_CONFIG = "grails.cassandra.keyspace";
-	public static final String KEYSPACE_NAME = "grails.cassandra.keyspace.name";
-	public static final String DEFAULT_MAPPING = "grails.cassandra.default.mapping";
-	public static final String KEYSPACE_ACTION = "grails.cassandra.keyspace.action";
-	public static final String KEYSPACE_DURABLE_WRITES = "grails.cassandra.keyspace.durableWrites";
-	public static final String KEYSPACE_REPLICATION_FACTOR = "grails.cassandra.keyspace.replicationFactor";
-	public static final String KEYSPACE_REPLICATION_STRATEGY = "grails.cassandra.keyspace.replicationStrategy";
-	public static final String KEYSPACE_NETWORK_TOPOLOGY = "grails.cassandra.keyspace.networkTopology";
+    public static final String WRITE_OPTIONS = "writeOptions";
+    private static Logger log = LoggerFactory.getLogger(CassandraDatastore.class);
+    // TODO make one keyspace for each session somehow, maybe just do a
+    // different datastore instance?
+    public static final String DEFAULT_KEYSPACE = "CassandraKeySpace";
+    public static final SchemaAction DEFAULT_SCHEMA_ACTION = SchemaAction.NONE;
+    public static final String CONTACT_POINTS = "grails.cassandra.contactPoints";
+    public static final String PORT = "grails.cassandra.port";
+    public static final String SCHEMA_ACTION = "grails.cassandra.dbCreate";
+    public static final String KEYSPACE_CONFIG = "grails.cassandra.keyspace";
+    public static final String KEYSPACE_NAME = "grails.cassandra.keyspace.name";
+    public static final String DEFAULT_MAPPING = "grails.cassandra.default.mapping";
+    public static final String KEYSPACE_ACTION = "grails.cassandra.keyspace.action";
+    public static final String KEYSPACE_DURABLE_WRITES = "grails.cassandra.keyspace.durableWrites";
+    public static final String KEYSPACE_REPLICATION_FACTOR = "grails.cassandra.keyspace.replicationFactor";
+    public static final String KEYSPACE_REPLICATION_STRATEGY = "grails.cassandra.keyspace.replicationStrategy";
+    public static final String KEYSPACE_NETWORK_TOPOLOGY = "grails.cassandra.keyspace.networkTopology";
+    protected Cluster nativeCluster;
+    protected com.datastax.driver.core.Session nativeSession;
+    protected BasicCassandraMappingContext springCassandraMappingContext;
+    protected CassandraTemplate cassandraTemplate;
+    protected CassandraAdminTemplate cassandraAdminTemplate;
+    protected CassandraCqlClusterFactoryBean cassandraCqlClusterFactoryBean;
+    protected KeyspaceActionSpecificationFactoryBean keyspaceActionSpecificationFactoryBean;
+    protected GormCassandraSessionFactoryBean cassandraSessionFactoryBean;
+    protected boolean stateless = false;
+    protected String keyspace;
+    protected boolean developmentMode = false;
+    protected final CassandraGormEnhancer gormEnhancer;
+    protected final PlatformTransactionManager transactionManager;
 
-	protected Cluster nativeCluster;
-	protected com.datastax.driver.core.Session nativeSession;
-	protected BasicCassandraMappingContext springCassandraMappingContext;
-	protected CassandraTemplate cassandraTemplate;
-	protected CassandraAdminTemplate cassandraAdminTemplate;
-	protected CassandraCqlClusterFactoryBean cassandraCqlClusterFactoryBean;
-	protected KeyspaceActionSpecificationFactoryBean keyspaceActionSpecificationFactoryBean;
-	protected GormCassandraSessionFactoryBean cassandraSessionFactoryBean;
-	protected boolean stateless = false;
-	protected String keyspace;
-	protected boolean developmentMode = false;
+    public CassandraDatastore() {
+        this(new CassandraMappingContext(), Collections.<String, Object>emptyMap(), null);
+    }
 
-	public CassandraDatastore() {
-		this(new CassandraMappingContext(), Collections.<String, Object> emptyMap(), null);
-	}
+    public CassandraDatastore(Map<String, Object> connectionDetails, ConfigurableApplicationContext ctx) {
+        this(new CassandraMappingContext(), connectionDetails, ctx);
+    }
 
-	public CassandraDatastore(Map<String, Object> connectionDetails, ConfigurableApplicationContext ctx) {
-		this(new CassandraMappingContext(), connectionDetails, ctx);
-	}
+    public CassandraDatastore(CassandraMappingContext mappingContext, PropertyResolver connectionDetails, ConfigurableApplicationContext ctx) {
+        this(mappingContext, connectionDetails, null, ctx);
+    }
 
-	public CassandraDatastore(CassandraMappingContext mappingContext, PropertyResolver connectionDetails, ConfigurableApplicationContext ctx) {
-		this(mappingContext, connectionDetails, null, ctx);
-	}
-
-	public CassandraDatastore(CassandraMappingContext mappingContext, Map<String, Object> connectionDetails, ConfigurableApplicationContext ctx) {
-		this(mappingContext, mapToPropertyResolver(connectionDetails), ctx);
-	}
+    public CassandraDatastore(CassandraMappingContext mappingContext, Map<String, Object> connectionDetails, ConfigurableApplicationContext ctx) {
+        this(mappingContext, mapToPropertyResolver(connectionDetails), ctx);
+    }
 
     public CassandraDatastore(CassandraMappingContext mappingContext, PropertyResolver connectionDetails, Cluster existingCluster, ConfigurableApplicationContext ctx) {
         super(mappingContext, connectionDetails, ctx);
         this.keyspace = mappingContext.getKeyspace();
-		this.nativeCluster = existingCluster;
+        this.nativeCluster = existingCluster;
         Assert.hasText(keyspace, "Keyspace must be set");
         springCassandraMappingContext = new BasicCassandraMappingContext(mappingContext);
-
+        DatastoreTransactionManager datastoreTransactionManager = new DatastoreTransactionManager();
+        datastoreTransactionManager.setDatastore(this);
+        this.transactionManager = datastoreTransactionManager;
         mappingContext.setSpringCassandraMappingContext(springCassandraMappingContext);
-		mappingContext.addMappingContextListener(this);
+        mappingContext.addMappingContextListener(this);
 
         initializeConverters(mappingContext);
-
-        if(log.isDebugEnabled()) {
+        if(ctx != null) {
+            registerEventListeners(new ConfigurableApplicationContextEventPublisher(ctx));
+        }
+        this.gormEnhancer = new CassandraGormEnhancer(this, transactionManager);
+        enhanceAll();
+        if (log.isDebugEnabled()) {
             log.debug("Initializing Cassandra Datastore for keyspace: " + keyspace);
         }
     }
 
-	/**
-	 * Sets to development mode which enables automatic creation of keyspace and schema
-	 *
-	 * @param developmentMode True if development mode is enabled
+    // TODO: Remove this in the future, only here to support unit testing
+    @Deprecated
+    public void enhanceAll() {
+        for(PersistentEntity entity : this.mappingContext.getPersistentEntities()) {
+            gormEnhancer.addCollectionMethods(entity);
+        }
+    }
+
+    /**
+     * Sets to development mode which enables automatic creation of keyspace and schema
+     *
+     * @param developmentMode True if development mode is enabled
      */
-	public void setDevelopmentMode(boolean developmentMode) {
-		this.developmentMode = developmentMode;
-	}
+    public void setDevelopmentMode(boolean developmentMode) {
+        this.developmentMode = developmentMode;
+    }
 
-	@Override
-	protected void initializeConverters(MappingContext mappingContext) {
-		super.initializeConverters(mappingContext);
-		mappingContext.getConverterRegistry().addConverter(new TimeZoneToStringConverter());
-	}
+    protected void registerEventListeners(ConfigurableApplicationEventPublisher eventPublisher) {
+        eventPublisher.addApplicationListener(new DomainEventListener(this));
+        eventPublisher.addApplicationListener(new AutoTimestampEventListener(this));
+        eventPublisher.addApplicationListener(new ValidationEventListener(this));
+    }
 
-	public void setCassandraCqlClusterFactoryBean(CassandraCqlClusterFactoryBean cassandraCqlClusterFactoryBean) {
-		this.cassandraCqlClusterFactoryBean = cassandraCqlClusterFactoryBean;
-	}
+    @Override
+    protected void initializeConverters(MappingContext mappingContext) {
+        super.initializeConverters(mappingContext);
+        mappingContext.getConverterRegistry().addConverter(new TimeZoneToStringConverter());
+    }
 
-	public void setKeyspaceActionSpecificationFactoryBean(KeyspaceActionSpecificationFactoryBean keyspaceActionSpecificationFactoryBean) {
-		this.keyspaceActionSpecificationFactoryBean = keyspaceActionSpecificationFactoryBean;
-	}
+    public void setCassandraCqlClusterFactoryBean(CassandraCqlClusterFactoryBean cassandraCqlClusterFactoryBean) {
+        this.cassandraCqlClusterFactoryBean = cassandraCqlClusterFactoryBean;
+    }
 
-	public void setCassandraSessionFactoryBean(GormCassandraSessionFactoryBean cassandraSessionFactoryBean) {
-		this.cassandraSessionFactoryBean = cassandraSessionFactoryBean;
-	}
+    public void setKeyspaceActionSpecificationFactoryBean(KeyspaceActionSpecificationFactoryBean keyspaceActionSpecificationFactoryBean) {
+        this.keyspaceActionSpecificationFactoryBean = keyspaceActionSpecificationFactoryBean;
+    }
 
-	@Override
-	public void afterPropertiesSet() throws Exception {
-		createCluster();
-		createNativeSession();
-	}
+    public void setCassandraSessionFactoryBean(GormCassandraSessionFactoryBean cassandraSessionFactoryBean) {
+        this.cassandraSessionFactoryBean = cassandraSessionFactoryBean;
+    }
 
-	protected Cluster createCluster() throws Exception {
-		if (nativeCluster == null) {
-			if (cassandraCqlClusterFactoryBean == null) {
-				cassandraCqlClusterFactoryBean = new CassandraCqlClusterFactoryBean();
-			}
-			cassandraCqlClusterFactoryBean.setContactPoints(
-					connectionDetails.getProperty(CONTACT_POINTS, CassandraCqlClusterFactoryBean.DEFAULT_CONTACT_POINTS)
-			);
-			cassandraCqlClusterFactoryBean.setPort(
-					connectionDetails.getProperty(PORT, Integer.class, CassandraCqlClusterFactoryBean.DEFAULT_PORT)
-			);
-			Set<KeyspaceActionSpecification<?>> keyspaceSpecifications = createKeyspaceSpecifications();
-			cassandraCqlClusterFactoryBean.setKeyspaceSpecifications(keyspaceSpecifications);
-			cassandraCqlClusterFactoryBean.afterPropertiesSet();
-			nativeCluster = cassandraCqlClusterFactoryBean.getObject();
-			if (nativeCluster == null) {
-				throw new DatastoreConfigurationException("Cassandra driver cluster not created");
-			}
-		}
-		return nativeCluster;
-	}
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        createCluster();
+        createNativeSession();
+    }
 
-	protected Set<KeyspaceActionSpecification<?>> createKeyspaceSpecifications() {
-		Set<KeyspaceActionSpecification<?>> specifications = Collections.emptySet();
-		KeyspaceAction keyspaceAction = readKeyspaceAction();
+    protected Cluster createCluster() throws Exception {
+        if (nativeCluster == null) {
+            if (cassandraCqlClusterFactoryBean == null) {
+                cassandraCqlClusterFactoryBean = new CassandraCqlClusterFactoryBean();
+            }
+            String contactPoints = connectionDetails.getProperty(CONTACT_POINTS, CassandraCqlClusterFactoryBean.DEFAULT_CONTACT_POINTS);
+            cassandraCqlClusterFactoryBean.setContactPoints(
+                    contactPoints
+            );
+            Integer defaultPort = connectionDetails.getProperty(PORT, Integer.class, CassandraCqlClusterFactoryBean.DEFAULT_PORT);
+            cassandraCqlClusterFactoryBean.setPort(
+                    defaultPort
+            );
+            Set<KeyspaceActionSpecification<?>> keyspaceSpecifications = createKeyspaceSpecifications();
+            cassandraCqlClusterFactoryBean.setKeyspaceSpecifications(keyspaceSpecifications);
+            cassandraCqlClusterFactoryBean.afterPropertiesSet();
+            nativeCluster = cassandraCqlClusterFactoryBean.getObject();
+            if (nativeCluster == null) {
+                throw new DatastoreConfigurationException("Cassandra driver cluster not created");
+            }
+        }
+        return nativeCluster;
+    }
 
-		if (keyspaceAction != null) {
-			log.info("Set keyspace generation strategy to '" + connectionDetails.getProperty(KEYSPACE_ACTION) + "'");
-			if (keyspaceActionSpecificationFactoryBean == null) {
-				keyspaceActionSpecificationFactoryBean = new KeyspaceActionSpecificationFactoryBean();
-			}
-			keyspaceActionSpecificationFactoryBean.setName(keyspace);
-			keyspaceActionSpecificationFactoryBean.setAction(keyspaceAction);
-			keyspaceActionSpecificationFactoryBean.setDurableWrites(
-					connectionDetails.getProperty(KEYSPACE_DURABLE_WRITES, Boolean.class, KeyspaceAttributes.DEFAULT_DURABLE_WRITES)
-			);
-			ReplicationStrategy replicationStrategy = connectionDetails.getProperty(KEYSPACE_REPLICATION_STRATEGY, ReplicationStrategy.class, ReplicationStrategy.SIMPLE_STRATEGY);
-			keyspaceActionSpecificationFactoryBean.setReplicationStrategy(replicationStrategy);
+    protected Set<KeyspaceActionSpecification<?>> createKeyspaceSpecifications() {
+        Set<KeyspaceActionSpecification<?>> specifications = Collections.emptySet();
+        KeyspaceAction keyspaceAction = readKeyspaceAction();
 
-			if (replicationStrategy == ReplicationStrategy.SIMPLE_STRATEGY) {
-				keyspaceActionSpecificationFactoryBean.setReplicationFactor(
-						connectionDetails.getProperty(KEYSPACE_REPLICATION_FACTOR, Long.class, KeyspaceAttributes.DEFAULT_REPLICATION_FACTOR)
-				);
-			} else if (replicationStrategy == ReplicationStrategy.NETWORK_TOPOLOGY_STRATEGY) {
-				Map networkTopology = connectionDetails.getProperty( KEYSPACE_NETWORK_TOPOLOGY, Map.class, null);
-				if (networkTopology != null) {
-					List<String> dataCenters = new ArrayList<String>();
-					List<String> replicationFactors = new ArrayList<String>();
-					for (Object o : networkTopology.entrySet()) {
-						Entry entry = (Entry) o;
-						dataCenters.add(String.valueOf(entry.getKey()));
-						replicationFactors.add(String.valueOf(entry.getValue()));
-					}
-					keyspaceActionSpecificationFactoryBean.setNetworkTopologyDataCenters(dataCenters);
-					keyspaceActionSpecificationFactoryBean.setNetworkTopologyReplicationFactors(replicationFactors);
-				}
-			}
+        if (keyspaceAction != null) {
+            log.info("Set keyspace generation strategy to '" + connectionDetails.getProperty(KEYSPACE_ACTION) + "'");
+            if (keyspaceActionSpecificationFactoryBean == null) {
+                keyspaceActionSpecificationFactoryBean = new KeyspaceActionSpecificationFactoryBean();
+            }
+            keyspaceActionSpecificationFactoryBean.setName(keyspace);
+            keyspaceActionSpecificationFactoryBean.setAction(keyspaceAction);
+            keyspaceActionSpecificationFactoryBean.setDurableWrites(
+                    connectionDetails.getProperty(KEYSPACE_DURABLE_WRITES, Boolean.class, KeyspaceAttributes.DEFAULT_DURABLE_WRITES)
+            );
+            ReplicationStrategy replicationStrategy = connectionDetails.getProperty(KEYSPACE_REPLICATION_STRATEGY, ReplicationStrategy.class, ReplicationStrategy.SIMPLE_STRATEGY);
+            keyspaceActionSpecificationFactoryBean.setReplicationStrategy(replicationStrategy);
 
-			keyspaceActionSpecificationFactoryBean.setIfNotExists(true);
-			try {
-				keyspaceActionSpecificationFactoryBean.afterPropertiesSet();
-				specifications = keyspaceActionSpecificationFactoryBean.getObject();
+            if (replicationStrategy == ReplicationStrategy.SIMPLE_STRATEGY) {
+                keyspaceActionSpecificationFactoryBean.setReplicationFactor(
+                        connectionDetails.getProperty(KEYSPACE_REPLICATION_FACTOR, Long.class, KeyspaceAttributes.DEFAULT_REPLICATION_FACTOR)
+                );
+            } else if (replicationStrategy == ReplicationStrategy.NETWORK_TOPOLOGY_STRATEGY) {
+                Map networkTopology = connectionDetails.getProperty(KEYSPACE_NETWORK_TOPOLOGY, Map.class, null);
+                if (networkTopology != null) {
+                    List<String> dataCenters = new ArrayList<String>();
+                    List<String> replicationFactors = new ArrayList<String>();
+                    for (Object o : networkTopology.entrySet()) {
+                        Entry entry = (Entry) o;
+                        dataCenters.add(String.valueOf(entry.getKey()));
+                        replicationFactors.add(String.valueOf(entry.getValue()));
+                    }
+                    keyspaceActionSpecificationFactoryBean.setNetworkTopologyDataCenters(dataCenters);
+                    keyspaceActionSpecificationFactoryBean.setNetworkTopologyReplicationFactors(replicationFactors);
+                }
+            }
 
-			} catch (Exception e) {
-				throw new DatastoreConfigurationException(String.format("Failed to create keyspace [%s] ", keyspace), e);
-			}
-		}
-		return specifications;
-	}
+            keyspaceActionSpecificationFactoryBean.setIfNotExists(true);
+            try {
+                keyspaceActionSpecificationFactoryBean.afterPropertiesSet();
+                specifications = keyspaceActionSpecificationFactoryBean.getObject();
 
-	protected com.datastax.driver.core.Session createNativeSession() throws ClassNotFoundException, Exception {
-		if (nativeSession == null) {
-			Assert.notNull(nativeCluster, "Cassandra driver cluster not created");
-			if (cassandraSessionFactoryBean == null) {
-				cassandraSessionFactoryBean = new GormCassandraSessionFactoryBean(mappingContext, springCassandraMappingContext);
-			}
-			cassandraSessionFactoryBean.setCluster(nativeCluster);
-			cassandraSessionFactoryBean.setKeyspaceName(this.keyspace);
-			MappingCassandraConverter mappingCassandraConverter = new MappingCassandraConverter(cassandraMapping());
-			cassandraSessionFactoryBean.setConverter(mappingCassandraConverter);
-			SchemaAction schemaAction = readSchemaAction();
-			cassandraSessionFactoryBean.setSchemaAction(schemaAction);
-			if(log.isInfoEnabled()) {
-				log.info("Set Cassandra db generation strategy to '" + schemaAction + "'");
-			}
-			// TODO: startup and shutdown scripts addition
-			cassandraSessionFactoryBean.afterPropertiesSet();
-			nativeSession = cassandraSessionFactoryBean.getObject();
-			cassandraTemplate = new CassandraTemplate(nativeSession, mappingCassandraConverter);
-			cassandraTemplate.setExceptionTranslator(new CassandraExceptionTranslator());
-			cassandraAdminTemplate = new CassandraAdminTemplate(nativeSession, mappingCassandraConverter);
-		}
-		return nativeSession;
-	}
+            } catch (Exception e) {
+                throw new DatastoreConfigurationException(String.format("Failed to create keyspace [%s] ", keyspace), e);
+            }
+        }
+        return specifications;
+    }
 
-	protected org.springframework.data.cassandra.mapping.CassandraMappingContext cassandraMapping() throws ClassNotFoundException {
-		Collection<PersistentEntity> persistentEntities = mappingContext.getPersistentEntities();
-		Set<Class<?>> entitySet = new HashSet<Class<?>>();
-		for (PersistentEntity persistentEntity : persistentEntities) {
-			entitySet.add(persistentEntity.getJavaClass());
-		}
-		springCassandraMappingContext.setInitialEntitySet(entitySet);
-		springCassandraMappingContext.afterPropertiesSet();
+    protected com.datastax.driver.core.Session createNativeSession() throws ClassNotFoundException, Exception {
+        if (nativeSession == null) {
+            final SchemaAction schemaAction = readSchemaAction();
+            Assert.notNull(nativeCluster, "Cassandra driver cluster not created");
+            if (cassandraSessionFactoryBean == null) {
+                cassandraSessionFactoryBean = new GormCassandraSessionFactoryBean();
+            }
+            cassandraSessionFactoryBean.setCluster(nativeCluster);
+            cassandraSessionFactoryBean.setKeyspaceName(this.keyspace);
+            MappingCassandraConverter mappingCassandraConverter = new MappingCassandraConverter(cassandraMapping());
+            cassandraSessionFactoryBean.setConverter(mappingCassandraConverter);
+            cassandraSessionFactoryBean.setSchemaAction(schemaAction);
+            if (log.isInfoEnabled()) {
+                log.info("Set Cassandra db generation strategy to '" + schemaAction + "'");
+            }
+            // TODO: startup and shutdown scripts addition
+            buildIndex();
+            nativeSession = cassandraSessionFactoryBean.getObject();
+            cassandraTemplate = new CassandraTemplate(nativeSession, mappingCassandraConverter);
+            cassandraTemplate.setExceptionTranslator(new CassandraExceptionTranslator());
+            cassandraAdminTemplate = new CassandraAdminTemplate(nativeSession, mappingCassandraConverter);
+        }
+        return nativeSession;
+    }
 
-		return springCassandraMappingContext;
-	}
-
-	@Override
-	protected Session createSession(PropertyResolver connectionDetails) {
-		if (stateless) {
-			return createStatelessSession(connectionDetails);
-		} else {
-			return new CassandraSession(this, getMappingContext(), this.nativeSession, getApplicationEventPublisher(), false, cassandraTemplate);
-		}
-	}
-
-	@Override
-	protected Session createStatelessSession(PropertyResolver connectionDetails) {
-		return new CassandraSession(this, getMappingContext(), this.nativeSession, getApplicationEventPublisher(), true, cassandraTemplate);
-	}
-
-	@Override
-	public void persistentEntityAdded(PersistentEntity entity) {
-		// get call here adds a persistententity to
-		// springCassandraMappingContext
-		springCassandraMappingContext.getPersistentEntity(entity.getJavaClass());
-	}
-
-	public Cluster getNativeCluster() {
-		return nativeCluster;
-	}
-
-	public com.datastax.driver.core.Session getNativeSession() {
-		return nativeSession;
-	}
-
-	public CassandraTemplate getCassandraTemplate() {
-		return cassandraTemplate;
-	}
-
-	public void createTableDefinition(Class<?> cls) {
-		cassandraSessionFactoryBean.createTable(cls);
-	}
+    protected void buildIndex() throws Exception {
+        if(cassandraSessionFactoryBean != null) {
+            cassandraSessionFactoryBean.afterPropertiesSet();
+        }
+    }
 
 
-	@Override
-	public void destroy() throws Exception {
-		super.destroy();
-		if (cassandraSessionFactoryBean != null) {
-			cassandraSessionFactoryBean.destroy();
-		}
-		if (cassandraCqlClusterFactoryBean != null) {
-			cassandraCqlClusterFactoryBean.destroy();
-		}
-	}
+    protected org.springframework.data.cassandra.mapping.CassandraMappingContext cassandraMapping() throws ClassNotFoundException {
+        Collection<PersistentEntity> persistentEntities = mappingContext.getPersistentEntities();
+        Set<Class<?>> entitySet = new HashSet<Class<?>>();
+        for (PersistentEntity persistentEntity : persistentEntities) {
+            entitySet.add(persistentEntity.getJavaClass());
+        }
+        springCassandraMappingContext.setInitialEntitySet(entitySet);
+        springCassandraMappingContext.afterPropertiesSet();
+
+        return springCassandraMappingContext;
+    }
+
+    @Override
+    protected Session createSession(PropertyResolver connectionDetails) {
+        if (stateless) {
+            return createStatelessSession(connectionDetails);
+        } else {
+            return new CassandraSession(this, getMappingContext(), this.nativeSession, getApplicationEventPublisher(), false, cassandraTemplate);
+        }
+    }
+
+    @Override
+    protected Session createStatelessSession(PropertyResolver connectionDetails) {
+        return new CassandraSession(this, getMappingContext(), this.nativeSession, getApplicationEventPublisher(), true, cassandraTemplate);
+    }
+
+    @Override
+    public void persistentEntityAdded(PersistentEntity entity) {
+        // get call here adds a persistententity to
+        // springCassandraMappingContext
+        this.gormEnhancer.registerEntity(entity);
+        this.gormEnhancer.addCollectionMethods(entity);
+        try {
+            CassandraPersistentEntity<?> springEntity = springCassandraMappingContext.getPersistentEntity(entity.getJavaClass());
+            if( cassandraSessionFactoryBean != null) {
+                cassandraSessionFactoryBean.createTableIfNecessary(springEntity);
+            }
+        } catch (Exception e) {
+            throw new DatastoreConfigurationException("Could not add entity ["+entity.getName()+"] as Cassandra entity: " + e.getMessage(), e);
+        }
+    }
+
+    public Cluster getNativeCluster() {
+        return nativeCluster;
+    }
+
+    public com.datastax.driver.core.Session getNativeSession() {
+        return nativeSession;
+    }
+
+    public CassandraTemplate getCassandraTemplate() {
+        return cassandraTemplate;
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        super.destroy();
+        this.gormEnhancer.close();
+        if (cassandraSessionFactoryBean != null) {
+            cassandraSessionFactoryBean.destroy();
+        }
+        if (cassandraCqlClusterFactoryBean != null) {
+            cassandraCqlClusterFactoryBean.destroy();
+        }
+    }
 
 
-	private KeyspaceAction readKeyspaceAction() {
-		Map<String, KeyspaceAction> keyspaceActionMap = new HashMap<String, KeyspaceAction>();
-		keyspaceActionMap.put("create", KeyspaceAction.CREATE);
-		keyspaceActionMap.put("create-drop", KeyspaceAction.CREATE_DROP);
-		return EnumUtil.findMatchingEnum(KEYSPACE_ACTION, connectionDetails.getProperty(KEYSPACE_ACTION,(String)null), keyspaceActionMap, developmentMode ? KeyspaceAction.CREATE_DROP : null);
-	}
-	
-	private SchemaAction readSchemaAction() {		
-		Map<String, SchemaAction> schemaActionMap = new HashMap<String, SchemaAction>();
-		schemaActionMap.put("none", SchemaAction.NONE);
-		schemaActionMap.put("create", SchemaAction.CREATE);
-		schemaActionMap.put("recreate", SchemaAction.RECREATE);
-		schemaActionMap.put("recreate-drop-unused", SchemaAction.RECREATE_DROP_UNUSED);
-		return EnumUtil.findMatchingEnum(SCHEMA_ACTION, connectionDetails.getProperty(SCHEMA_ACTION, developmentMode ? "recreate-drop-unused" :  "none"), schemaActionMap, developmentMode ? SchemaAction.RECREATE_DROP_UNUSED : SchemaAction.NONE);
-	}
+    private KeyspaceAction readKeyspaceAction() {
+        Map<String, KeyspaceAction> keyspaceActionMap = new HashMap<String, KeyspaceAction>();
+        keyspaceActionMap.put("create", KeyspaceAction.CREATE);
+        keyspaceActionMap.put("create-drop", KeyspaceAction.CREATE_DROP);
+        return EnumUtil.findMatchingEnum(KEYSPACE_ACTION, connectionDetails.getProperty(KEYSPACE_ACTION, (String) null), keyspaceActionMap, developmentMode ? KeyspaceAction.CREATE_DROP : null);
+    }
+
+    private SchemaAction readSchemaAction() {
+        Map<String, SchemaAction> schemaActionMap = new HashMap<String, SchemaAction>();
+        schemaActionMap.put("none", SchemaAction.NONE);
+        schemaActionMap.put("create", SchemaAction.CREATE);
+        schemaActionMap.put("recreate", SchemaAction.RECREATE);
+        schemaActionMap.put("recreate-drop-unused", SchemaAction.RECREATE_DROP_UNUSED);
+        return EnumUtil.findMatchingEnum(SCHEMA_ACTION, connectionDetails.getProperty(SCHEMA_ACTION, developmentMode ? "recreate-drop-unused" : "none"), schemaActionMap, developmentMode ? SchemaAction.RECREATE_DROP_UNUSED : SchemaAction.NONE);
+    }
+
+    @Override
+    public void close() throws IOException {
+        try {
+            destroy();
+        } catch (Exception e) {
+            throw new DatastoreException("Error shutting down Cassandra datastore: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public PlatformTransactionManager getTransactionManager() {
+        return this.transactionManager;
+    }
 }

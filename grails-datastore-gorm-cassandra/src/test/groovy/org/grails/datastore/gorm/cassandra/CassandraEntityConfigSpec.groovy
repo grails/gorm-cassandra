@@ -16,6 +16,7 @@ import org.grails.datastore.mapping.model.IllegalMappingException
 import org.grails.datastore.mapping.model.PersistentEntity
 import org.grails.datastore.mapping.query.Query.Order.Direction
 import org.springframework.cassandra.core.Ordering
+import org.springframework.cassandra.core.keyspace.TableOption
 import spock.lang.IgnoreIf
 import spock.lang.Specification
 
@@ -164,7 +165,7 @@ class CassandraEntityConfigSpec extends Specification{
 			Options options = tableMetadata.options
 			options.comment == "table comment"
 			options.isCompactStorage
-			options.caching == "ALL"
+			options.caching.inspect() == "['keys':'ALL', 'rows_per_partition':'NONE']"
 			options.bloomFilterFalsePositiveChance == 0.2
 			options.readRepairChance == 0.1
 			options.localReadRepairChance == 0.2
@@ -183,8 +184,8 @@ class CassandraEntityConfigSpec extends Specification{
 			compression.sstable_compression.endsWith("LZ4Compressor")
 			compression.chunk_length_kb == "128"
 					
-		cleanup:
-			cassandraDatastore?.destroy()
+//		cleanup:
+//			cassandraDatastore?.destroy()
 			
 	}		
 	
@@ -207,7 +208,7 @@ class CassandraEntityConfigSpec extends Specification{
 										
 		then:
 			def e = thrown(IllegalMappingException)			
-			e.message.startsWith("Invalid option [invalidOption] for [tableOptions], allowable values are")			
+			e.message.startsWith("Invalid table option [invalidOption] for entity")
 		
 		when: "Invalid compaction option"
 			cassandraDatastore = new CassandraDatastore(cassandraMappingContext, config, null)			
@@ -216,20 +217,8 @@ class CassandraEntityConfigSpec extends Specification{
 										
 		then:
 			e = thrown(IllegalMappingException)
-			e.message.startsWith("Invalid option [unknown] for [compaction options], allowable values are")			
+			e.message.startsWith("Invalid table option [compaction] for entity [org.grails.datastore.gorm.cassandra.TablePropertiesEntity]")
 		
-		when: "Invalid column marked as ordered"
-    		cassandraDatastore = new CassandraDatastore(cassandraMappingContext, config, null)
-			table.tableProperties = originalOptions    		
-			Column name = entity.getPropertyByName("firstName").getMapping().getMappedForm()		
-			name.setPrimaryKey(null)	
-			table.addColumn(name)
-			cassandraDatastore.afterPropertiesSet()
-		
-		then:
-			e = thrown(IllegalMappingException)
-			e.message == "Invalid mapping for property [firstName]. [order] attribute can only be set for a clustered primary key"
-			
 		cleanup:
 			cassandraDatastore?.destroy()
 	}
@@ -250,8 +239,7 @@ class TablePropertiesEntity {
 	static tableProperties = {
 		comment "table comment"
 		"COMPACT STORAGE" true
-		replicate_on_write false
-		caching "all"
+		caching keys: "all"
 		bloom_filter_fp_chance 0.2
 		read_repair_chance 0.1
 		dclocal_read_repair_chance 0.2

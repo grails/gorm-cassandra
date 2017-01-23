@@ -34,8 +34,8 @@ class CassandraGormEnhancer extends GormEnhancer {
 		super.enhance(e, onlyExtendedMethods)
 		addCollectionMethods(e)
 	}
-	 
-	protected void addCollectionMethods(PersistentEntity e) {
+
+	void addCollectionMethods(PersistentEntity e) {
 		Class cls = e.javaClass
 		MetaClass mc = GrailsMetaClassUtils.getExpandoMetaClass(cls)
 		final proxyFactory = datastore.mappingContext.proxyFactory

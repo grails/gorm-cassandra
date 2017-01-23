@@ -31,7 +31,7 @@ class CassandraGrailsPlugin extends Plugin {
 	Closure doWithSpring() {
 		def initializer = new CassandraDatastoreSpringInitializer(config, grailsApplication.getArtefacts(DomainClassArtefactHandler.TYPE).collect() { GrailsClass cls -> cls.clazz })
 		initializer.registerApplicationIfNotPresent = false
-		initializer.defaultKeyspaceName = grailsApplication.getMetadata().getApplicationName()
+		initializer.defaultKeyspaceName = grailsApplication.getMetadata().getApplicationName().replace('-', '_')
 		initializer.developmentMode = Environment.isDevelopmentMode()
 		initializer.setSecondaryDatastore(hasHibernatePlugin())
 		return initializer.getBeanDefinitions((BeanDefinitionRegistry)applicationContext)

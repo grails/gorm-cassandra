@@ -2,10 +2,12 @@ package org.grails.datastore.mapping.cassandra
 
 import org.grails.datastore.gorm.cassandra.mapping.MappingCassandraConverter
 import org.grails.datastore.mapping.cassandra.config.CassandraMappingContext
+import org.grails.datastore.mapping.cassandra.config.GormCassandraSessionFactoryBean
 import org.springframework.cassandra.config.CassandraCqlClusterFactoryBean
 import org.springframework.cassandra.config.KeyspaceAction
 import org.springframework.cassandra.config.KeyspaceActionSpecificationFactoryBean
 import org.springframework.cassandra.core.keyspace.KeyspaceOption.ReplicationStrategy
+import org.springframework.data.cassandra.config.CassandraSessionFactoryBean
 import org.springframework.data.cassandra.config.SchemaAction
 
 import spock.lang.Specification
@@ -32,7 +34,7 @@ class CassandraDatastoreSpec extends Specification {
 		cassandraDatastore.setCassandraCqlClusterFactoryBean(clusterBean)
 		cassandraDatastore.setKeyspaceActionSpecificationFactoryBean(keyspaceBean)
 		cassandraDatastore.setCassandraSessionFactoryBean(sessionBean)
-		
+
 		def mockCluster = Mock(Cluster)
 		1 * clusterBean.getObject() >> mockCluster
 		1 * sessionBean.getObject() >> Mock(Session)

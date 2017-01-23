@@ -152,5 +152,10 @@ class CommonTypesPersistenceSpec extends GormDatastoreSpec {
             "newascii" == ct.ascii
             "newvarchar" == ct.varchar
     }
+
+	@Override
+	List getDomainClasses() {
+		[CommonTypes]
+	}
 }
 

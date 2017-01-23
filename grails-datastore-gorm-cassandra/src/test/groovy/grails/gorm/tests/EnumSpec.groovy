@@ -58,14 +58,11 @@ class EnumSpec extends GormDatastoreSpec {
     		p.en == TestEnum.V3
 		
 		when: "delete"
-			t.delete(flush:true)
 			p.delete(flush:true)
 			session.clear()
-			t = t.get([en:t.en])
 			p = p.get(p.id)
 		
 		then:
-			t == null
 			p == null
 		                 
     }
