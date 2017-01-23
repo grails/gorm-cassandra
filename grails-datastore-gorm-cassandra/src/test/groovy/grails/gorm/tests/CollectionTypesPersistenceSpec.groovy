@@ -274,7 +274,7 @@ class CollectionTypesPersistenceSpec extends GormDatastoreSpec {
 		when: "test static methods"
 			ct.prependToList(9, [flush:true])
 			CollectionTypes.prependToList(ct.id, 6, [flush:true])
-			CollectionTypes.prependToList([id: ct.id], [0,5], [flush:true])
+			CollectionTypes.prependToList([id: ct.id], [5,0], [flush:true])
 			ct.discard()
 			ct = CollectionTypes.get(ct.id)
 			
