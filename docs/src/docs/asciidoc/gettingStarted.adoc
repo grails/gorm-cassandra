@@ -7,22 +7,9 @@ dependencies {
 }
 ----
 
-Note that if you get exceptions during startup or execution for newer versions of Grails 3.x (3.1 and above) you may need to enforce the dependencies:
-
-[source,groovy]
-----
-dependencies {
-    compile 'org.grails.plugins:cassandra:VERSION'
-    compile("com.datastax.cassandra:cassandra-driver-core:2.0.4")
-    compile "org.springframework.data:spring-data-commons:1.8.4.RELEASE"
-    compile("org.springframework.data:spring-data-cassandra:1.0.4.RELEASE") {
-        exclude group:'org.apache.cassandra',module:'cassandra-all'
-    }
-}
-----
 
 The next step is to setup a running Cassandra server. 
-Refer to the <<ref-orgcassandra-getting-started-Apache Cassandra Getting Started Guide,Apache Cassandra Getting Started Guide>> for an explanation on how to setup and startup a Cassandra instance. 
+Refer to the http://cassandra.apache.org/doc/latest/getting_started/index.html[Apache Cassandra Getting Started Guide] for an explanation on how to setup and startup a Cassandra instance.
 Once installed, starting Cassandra is typically a matter of executing the following command:
 
 [source,groovy]
@@ -53,6 +40,24 @@ grails:
         port: 9042
         keyspace:
             name: foo
+    }
+}
+----
+
+WARNING: Spring Boot 1.4.x and above includes http://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-nosql.html#boot-features-cassandra[Cassandra Auto Configuration] and by default in Grails 3.2.x above you will need to configure Cassandra using the appropriate Spring Boot configuration unless you exclude the auto configuration in your `Application` class. For example:
+
+[source,groovy]
+----
+import org.springframework.boot.autoconfigure.cassandra.*
+import org.springframework.boot.autoconfigure.data.cassandra.*
+import grails.boot.GrailsApp
+import grails.boot.config.GrailsAutoConfiguration
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration
+
+@EnableAutoConfiguration(exclude=[CassandraAutoConfiguration, CassandraDataAutoConfiguration])
+class Application extends GrailsAutoConfiguration {
+    static void main(String[] args) {
+        GrailsApp.run(Application, args)
     }
 }
 ----
