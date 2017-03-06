@@ -57,6 +57,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cassandra.core.CqlTemplate;
 import org.springframework.cassandra.core.SessionCallback;
 import org.springframework.cassandra.core.WriteOptions;
+import org.springframework.cassandra.support.exception.CassandraInvalidQueryException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.TypeDescriptor;
@@ -64,6 +65,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.data.cassandra.core.CassandraTemplate;
 import org.springframework.data.cassandra.mapping.CassandraPersistentEntity;
 import org.springframework.data.cassandra.mapping.CassandraPersistentProperty;
+import org.springframework.data.cassandra.repository.MapId;
+import org.springframework.data.cassandra.repository.support.BasicMapId;
 import org.springframework.data.mapping.PropertyHandler;
 
 import com.datastax.driver.core.querybuilder.Delete;
@@ -138,10 +141,10 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 	protected Object readObjectIdentifier(EntityAccess entityAccess, ClassMapping cm) {
 		Table table = (Table) cm.getMappedForm();
 		if (table.hasCompositePrimaryKeys()) {
-			Map<String, Object> identifier = new HashMap<String, Object>();
+			MapId identifier = BasicMapId.id();
 			for (Column column : table.getPrimaryKeys()) {
 				String name = column.getName();
-				identifier.put(name, entityAccess.getProperty(name));
+				identifier = identifier.with(name, (Serializable) entityAccess.getProperty(name));
 			}
 			return identifier;
 		} else {
@@ -193,11 +196,11 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 
 	@Override
 	protected EntityAccess retrieveEntry(PersistentEntity persistentEntity, String family, Serializable nativeKey) {
-		Map idMap = createIdMap(nativeKey, false);
+		MapId idMap = createIdMap(nativeKey, false);
         try {
             Object entity = cassandraTemplate.selectOneById(persistentEntity.getJavaClass(), idMap);
             return entity == null ? null : new CassandraEntityAccess(persistentEntity, entity);
-        } catch (com.datastax.driver.core.exceptions.InvalidQueryException e) {
+        } catch (CassandraInvalidQueryException e) {
             // this will happen if the identifier is invalid, return null in this case
             return null;
         }
@@ -304,8 +307,8 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 		return stringId;
 	}
 
-	protected Map<String, Serializable> createIdMap(Serializable nativeKey, boolean withColumnName) {
-		Map<String, Serializable> idMap = new HashMap<String, Serializable>();
+	protected MapId createIdMap(Serializable nativeKey, boolean withColumnName) {
+		MapId idMap = BasicMapId.id();
 		if (!(nativeKey instanceof Map)) {
 			String name = getPersistentEntity().getIdentity().getName();
 			CassandraPersistentProperty cassandraPersistentProperty = springCassandraPersistentEntity.getPersistentProperty(name);
@@ -320,7 +323,9 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 				if (cassandraPersistentProperty == null || !cassandraPersistentProperty.isPrimaryKeyColumn()) {
 					throwUnknownPrimaryKeyException(name, springCassandraPersistentEntity.getName());
 				}
-				idMap.put((withColumnName ? cassandraPersistentProperty.getColumnName().toCql() : name), (Serializable) convertPrimitiveToNative(entry.getValue(), cassandraPersistentProperty, conversionService));
+				idMap = idMap.with(
+					(withColumnName ? cassandraPersistentProperty.getColumnName().toCql() : name), (Serializable) convertPrimitiveToNative(entry.getValue(), cassandraPersistentProperty, conversionService)
+				);
 			}
 		}
 		return idMap;
@@ -340,7 +345,7 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 
 	protected Update prepareUpdate(Serializable id, final Update update, WriteOptions writeOptions) {
 		Map<String, Serializable> idMap = createIdMap(id, true);
-		for (Entry<String, Serializable> entry : ((Map<String, Serializable>) idMap).entrySet()) {
+		for (Entry<String, Serializable> entry : idMap.entrySet()) {
 			update.where(eq(entry.getKey(), entry.getValue()));
 		}
 		CqlTemplate.addWriteOptions(update, writeOptions);
@@ -356,7 +361,7 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 
 	protected Delete prepareDelete(Serializable id, final Delete delete) {
 		Map<String, Serializable> idMap = createIdMap(id, true);
-		for (Entry<String, Serializable> entry : ((Map<String, Serializable>) idMap).entrySet()) {
+		for (Entry<String, Serializable> entry : idMap.entrySet()) {
 			delete.where(eq(entry.getKey(), entry.getValue()));
 		}		
 		return delete;

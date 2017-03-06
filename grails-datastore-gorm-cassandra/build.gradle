@@ -1,6 +1,6 @@
 
 dependencies {
-    compile("org.springframework.data:spring-data-cassandra:1.4.5.RELEASE")
+    compile("org.springframework.data:spring-data-cassandra:1.5.1.RELEASE")
 	compile("org.apache.commons:commons-lang3:3.3.2")
     compile("org.grails:grails-core:$grailsVersion") {
         exclude group:'aopalliance',module:'aopalliance'

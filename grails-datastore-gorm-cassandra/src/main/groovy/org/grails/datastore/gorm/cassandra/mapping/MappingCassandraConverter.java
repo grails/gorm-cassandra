@@ -6,6 +6,8 @@ import org.grails.datastore.mapping.model.types.conversion.StringToCurrencyConve
 import org.grails.datastore.mapping.model.types.conversion.StringToLocaleConverter;
 import org.grails.datastore.mapping.model.types.conversion.StringToTimeZoneConverter;
 import org.grails.datastore.mapping.model.types.conversion.StringToURLConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.data.cassandra.convert.CassandraPersistentEntityParameterValueProvider;
 import org.springframework.data.cassandra.convert.ColumnReader;
@@ -31,6 +33,7 @@ import com.datastax.driver.core.Row;
  * 
  */
 public class MappingCassandraConverter extends org.springframework.data.cassandra.convert.MappingCassandraConverter {
+    private final Logger log = LoggerFactory.getLogger(getClass());
     public MappingCassandraConverter(CassandraMappingContext cassandraMapping) {
         super(cassandraMapping);
         DefaultConversionService conversionService = (DefaultConversionService) getConversionService();

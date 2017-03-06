@@ -21,7 +21,7 @@ import spock.lang.IgnoreIf
 import spock.lang.Specification
 
 import com.datastax.driver.core.TableMetadata
-import com.datastax.driver.core.TableMetadata.Options
+import com.datastax.driver.core.TableOptionsMetadata
 
 @IgnoreIf({System.getenv('TRAVIS')})
 class CassandraEntityConfigSpec extends Specification{
@@ -161,8 +161,8 @@ class CassandraEntityConfigSpec extends Specification{
     		cluster != null
 			TableMetadata tableMetadata = cluster.metadata.getKeyspace(keyspace).getTable("tablepropertiesentity")
 			tableMetadata != null
-			
-			Options options = tableMetadata.options
+
+			TableOptionsMetadata options = tableMetadata.options
 			options.comment == "table comment"
 			options.isCompactStorage
 			options.caching.inspect() == "['keys':'ALL', 'rows_per_partition':'NONE']"

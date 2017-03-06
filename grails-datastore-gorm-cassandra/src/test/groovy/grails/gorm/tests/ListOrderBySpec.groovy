@@ -1,6 +1,7 @@
 package grails.gorm.tests
 
 import com.datastax.driver.core.exceptions.InvalidQueryException
+import org.springframework.cassandra.support.exception.CassandraInvalidQueryException
 
 /**
  * @author graemerocher
@@ -19,6 +20,6 @@ class ListOrderBySpec extends GormDatastoreSpec {
 
         then:
             //order by only supported when the partition key restricted by an EQ or IN which is not possible with listOrderBy
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
     }
 }

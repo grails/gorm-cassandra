@@ -1,6 +1,7 @@
 package grails.gorm.tests
 
 import com.datastax.driver.core.exceptions.InvalidQueryException
+import org.springframework.cassandra.support.exception.CassandraInvalidQueryException
 
 
 /**
@@ -368,31 +369,31 @@ class FindByMethodSpec extends GormDatastoreSpec {
             Book.findOrCreateByAuthorGreaterThan('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrCreateByAuthorLessThan('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrCreateByAuthorBetween('A', 'B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrCreateByAuthorGreaterThanEquals('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrCreateByAuthorLessThanEquals('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
             // GemFire doesn't like these...
         when:
@@ -447,31 +448,31 @@ class FindByMethodSpec extends GormDatastoreSpec {
             Book.findOrSaveByAuthorGreaterThan('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrSaveByAuthorLessThan('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrSaveByAuthorBetween('A', 'B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrSaveByAuthorGreaterThanEquals('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrSaveByAuthorLessThanEquals('B')
 
         then:
-            thrown InvalidQueryException
+            thrown CassandraInvalidQueryException
 
         when:
             Book.findOrSaveByAuthorIlike('B%')

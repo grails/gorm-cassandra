@@ -170,7 +170,7 @@ public class BasicCassandraMappingContext extends org.springframework.data.cassa
 					return true;
 				};
 			};
-		} else if (field != null && GrailsDomainClassProperty.VERSION.equals(field.getName()) && !gormEntity.isVersioned()) {
+		} else if (field != null && gormEntity != null && GrailsDomainClassProperty.VERSION.equals(field.getName()) && !gormEntity.isVersioned()) {
 			return transientProperty;
 		}
 		
