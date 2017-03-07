@@ -17,6 +17,7 @@ import org.grails.datastore.mapping.model.IllegalMappingException;
 import org.grails.datastore.mapping.model.MappingContext;
 import org.grails.datastore.mapping.model.PersistentEntity;
 import org.grails.datastore.mapping.model.PropertyMapping;
+import org.grails.datastore.mapping.model.config.GormProperties;
 import org.grails.datastore.mapping.model.types.Identity;
 import org.grails.datastore.mapping.reflect.ClassPropertyFetcher;
 import org.slf4j.Logger;
@@ -102,8 +103,23 @@ public class GormCassandraMappingFactory extends AbstractGormMappingFactory<Tabl
     public Identity<Column> createIdentity(PersistentEntity owner, MappingContext context, PropertyDescriptor pd) {
         final Table table = (Table) owner.getMapping().getMappedForm();
         if (table.hasCompositePrimaryKeys()) {
+            final Map<String, Column> properties = entityToPropertyMap.get(owner);
+            final Column idMapping = properties.get(GormProperties.IDENTITY);
+
+
             return new Identity<Column>(owner, context, table.getPrimaryKeyNames()[0], pd.getPropertyType()) {
-                PropertyMapping<Column> propertyMapping = createPropertyMapping(this, owner);
+                final Column mappedForm = idMapping != null ? idMapping : (Column) context.getMappingFactory().createMappedForm(this);
+                PropertyMapping<Column> propertyMapping = new PropertyMapping<Column>() {
+                    @Override
+                    public ClassMapping getClassMapping() {
+                        return owner.getMapping();
+                    }
+
+                    @Override
+                    public Column getMappedForm() {
+                        return mappedForm;
+                    }
+                };
 
                 public PropertyMapping<Column> getMapping() {
                     return propertyMapping;

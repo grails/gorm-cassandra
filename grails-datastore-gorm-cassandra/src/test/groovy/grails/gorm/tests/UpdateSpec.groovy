@@ -10,7 +10,7 @@ class UpdateSpec extends GormDatastoreSpec {
 			def t = new TestEntity(name:"Bob")
 			def p = new PersonLastNamePartitionKey(firstName: "Bob", lastName: "Wilson", age: 25)				
 			t.save()
-			p.save(flush:true)			
+			p.save(flush:true)
 			t = TestEntity.get(t.id)			
 			p = PersonLastNamePartitionKey.get([firstName:p.firstName, lastName: p.lastName, age: 25])		
 		

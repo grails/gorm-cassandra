@@ -1,10 +1,10 @@
 package org.grails.datastore.mapping.cassandra.utils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang3.EnumUtils;
 import org.springframework.cassandra.core.keyspace.Option;
 
 public class EnumUtil {
@@ -25,7 +25,7 @@ public class EnumUtil {
 		if (value == null) {
 			return null;
 		}
-		List<E> enumTypes = EnumUtils.getEnumList(enumClass);
+		List<E> enumTypes = new ArrayList<>(Arrays.asList(enumClass.getEnumConstants()));
 		E enumValue = null;
 		for (E e : enumTypes) {
 			if (Option.class.isInstance(e)) {
@@ -101,7 +101,7 @@ public class EnumUtil {
      */
 	public static <E extends Enum<E>> List<String> getValidEnumList(Class<E> enumClass) {
 		List<String> allowable = new ArrayList<String>();
-		List<E> enumList = EnumUtils.getEnumList(enumClass);
+		List<E> enumList = new ArrayList<>(Arrays.asList(enumClass.getEnumConstants()));
 		for (E e: enumList) {
 			if (Option.class.isInstance(e)) {
 				allowable.add(((Option)e).getName());

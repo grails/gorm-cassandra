@@ -31,7 +31,7 @@ class GormCassandraSessionFactoryBean extends CassandraSessionFactoryBean {
      * Builds the cassandra index based on the schema operation
      */
     void buildIndex() {
-        Collection<CassandraPersistentEntity> entities = mappingContext.getNonPrimaryKeyEntities()
+        Collection<CassandraPersistentEntity> entities = mappingContext.getTableEntities()
 
         for (CassandraPersistentEntity entity : entities) {
             buildIndex(entity)

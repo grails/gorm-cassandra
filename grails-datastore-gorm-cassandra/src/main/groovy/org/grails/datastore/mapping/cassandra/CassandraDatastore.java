@@ -35,6 +35,7 @@ import org.grails.datastore.mapping.model.DatastoreConfigurationException;
 import org.grails.datastore.mapping.model.MappingContext;
 import org.grails.datastore.mapping.model.PersistentEntity;
 import org.grails.datastore.mapping.transactions.DatastoreTransactionManager;
+import org.grails.datastore.mapping.transactions.TransactionCapableDatastore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -65,7 +66,7 @@ import java.util.Map.Entry;
  * beans to create and initialise the Cassandra driver cluster and session
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
-public class CassandraDatastore extends AbstractDatastore implements InitializingBean, DisposableBean, Closeable, MappingContext.Listener {
+public class CassandraDatastore extends AbstractDatastore implements InitializingBean, DisposableBean, Closeable, MappingContext.Listener, TransactionCapableDatastore {
 
     public static final String WRITE_OPTIONS = "writeOptions";
     private static Logger log = LoggerFactory.getLogger(CassandraDatastore.class);
@@ -380,6 +381,7 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
         }
     }
 
+    @Override
     public PlatformTransactionManager getTransactionManager() {
         return this.transactionManager;
     }

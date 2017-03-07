@@ -88,7 +88,7 @@ public class CassandraEntityPersister extends NativeEntryEntityPersister<EntityA
 	public CassandraEntityPersister(MappingContext context, PersistentEntity entity, CassandraSession cassandraSession, ApplicationEventPublisher applicationEventPublisher) {
 		super(context, entity, cassandraSession, applicationEventPublisher);
 		cassandraTemplate = getCassandraTemplate();
-		springCassandraPersistentEntity = cassandraTemplate.getCassandraMappingContext().getExistingPersistentEntity(entity.getJavaClass());
+		springCassandraPersistentEntity = cassandraTemplate.getMappingContext().getExistingPersistentEntity(entity.getJavaClass());
 		conversionService = context.getConversionService();
 	}
 

@@ -1,9 +1,8 @@
-package org.grails.compiler;
+package org.grails.datastore.gorm.cassandra.transform;
 
-import grails.artefact.Artefact;
-
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Modifier;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -15,20 +14,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 
-import grails.compiler.ast.GrailsArtefactClassInjector;
-import grails.compiler.ast.GrailsDomainClassInjector;
-import grails.core.GrailsDomainClassProperty;
-import grails.util.GrailsClassUtils;
-import org.apache.commons.lang3.BooleanUtils;
-import org.apache.commons.lang3.EnumUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.commons.lang3.math.NumberUtils;
-import org.codehaus.groovy.ast.AnnotationNode;
-import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.FieldNode;
-import org.codehaus.groovy.ast.MethodNode;
-import org.codehaus.groovy.ast.Parameter;
-import org.codehaus.groovy.ast.PropertyNode;
+import org.codehaus.groovy.ast.*;
 import org.codehaus.groovy.ast.expr.ArgumentListExpression;
 import org.codehaus.groovy.ast.expr.BooleanExpression;
 import org.codehaus.groovy.ast.expr.ClassExpression;
@@ -45,15 +31,17 @@ import org.codehaus.groovy.ast.expr.TupleExpression;
 import org.codehaus.groovy.ast.stmt.BlockStatement;
 import org.codehaus.groovy.ast.stmt.ExpressionStatement;
 import org.codehaus.groovy.ast.stmt.Statement;
-import org.codehaus.groovy.classgen.GeneratorContext;
+import org.codehaus.groovy.control.CompilationUnit;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.messages.LocatedMessage;
-import org.codehaus.groovy.grails.compiler.injection.AstTransformer;
-import org.grails.compiler.injection.GrailsASTUtils;
+import org.codehaus.groovy.runtime.StringGroovyMethods;
+import org.grails.compiler.gorm.AdditionalGormEntityTransformation;
 import org.codehaus.groovy.syntax.Token;
-import org.grails.core.artefact.DomainClassArtefactHandler;
+import org.grails.datastore.mapping.cassandra.utils.EnumUtil;
 import org.grails.datastore.mapping.model.MappingFactory;
-import org.grails.io.support.GrailsResourceUtils;
+import org.grails.datastore.mapping.model.config.GormProperties;
+import org.grails.datastore.mapping.reflect.AstUtils;
+import org.grails.datastore.mapping.reflect.NameUtils;
 import org.springframework.cassandra.core.PrimaryKeyType;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.cassandra.mapping.CassandraType;
@@ -70,37 +58,17 @@ import com.datastax.driver.core.DataType.Name;
  * entity.
  * 
  */
-@AstTransformer
-public class GormToCassandraTransform implements GrailsDomainClassInjector, GrailsArtefactClassInjector {
+public class GormToCassandraTransform implements AdditionalGormEntityTransformation {
 
 	private static final String MAPPED_WITH = "cassandra";
+	private CompilationUnit compilationUnit;
 
-	@Override
-	public void performInjection(SourceUnit source, ClassNode classNode) {
-		performInjection(source, null, classNode);
-	}
-
-	@Override
-	public void performInjection(SourceUnit source, GeneratorContext context, ClassNode classNode) {
-		if (GrailsASTUtils.isDomainClass(classNode, source) && shouldInjectClass(classNode)) {
-			if (!classNode.getAnnotations(new ClassNode(Artefact.class)).isEmpty())
-				return;
-			performInjectionOnAnnotatedClass(source, classNode);
-		}
-	}
-
-	@Override
-	public void performInjectionOnAnnotatedEntity(ClassNode classNode) {
-		performInjectionOnAnnotatedClass(null, classNode);
-	}
-
-	@Override
 	public void performInjectionOnAnnotatedClass(SourceUnit source, ClassNode classNode) {
 		try {
 			boolean isHibernateInstalled = ClassUtils.isPresent("org.grails.orm.hibernate.AbstractHibernateDatastore", getClass().getClassLoader());
 			boolean cassandraEntity = false;
 			String mappedWith = null;
-			PropertyNode mappingNode = classNode.getProperty(GrailsDomainClassProperty.MAPPING_STRATEGY);
+			PropertyNode mappingNode = classNode.getProperty(GormProperties.MAPPING_STRATEGY);
 			if (mappingNode != null && mappingNode.isStatic() && mappingNode.getField() != null) {
 				Expression expression = mappingNode.getField().getInitialExpression();
 				mappedWith = expression.getText() != null ? expression.getText().toLowerCase() : null;
@@ -111,22 +79,15 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 			transformEntity(classNode, cassandraEntity);
 		} catch (Exception e) {
 			if (source != null) {
-				String message = "Error occured transfoming GORM entity into Cassandra entity: " + ExceptionUtils.getStackTrace(e).replaceAll("(\\" + System.getProperty("line.separator") + ")", " ");
+
+                StringWriter output = new StringWriter();
+                e.printStackTrace( new PrintWriter(output) );
+				String message = "Error occured transfoming GORM entity into Cassandra entity: " +                  output.toString().replaceAll("(\\" + System.getProperty("line.separator") + ")", " ");
 				Token token = Token.newString(classNode.getText(), classNode.getLineNumber(), classNode.getColumnNumber());
 				LocatedMessage locatedMessage = new LocatedMessage(message, token, source);
 				source.getErrorCollector().addFatalError(locatedMessage);
 			}
 		}
-	}
-
-	@Override
-	public boolean shouldInject(URL url) {
-		return GrailsResourceUtils.isDomainClass(url);
-	}
-
-	@Override
-	public String[] getArtefactTypes() {
-		return new String[] { DomainClassArtefactHandler.TYPE };
 	}
 
 	protected boolean shouldInjectClass(ClassNode classNode) {
@@ -135,7 +96,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 
 	public static void transformEntity(ClassNode classNode, boolean cassandraEntity) {
 
-		PropertyNode mappingNode = classNode.getProperty(GrailsDomainClassProperty.MAPPING);
+		PropertyNode mappingNode = classNode.getProperty(GormProperties.MAPPING);
 		Map<String, Map<String, ?>> propertyMappings = new HashMap<String, Map<String, ?>>();
 		if (mappingNode != null && mappingNode.isStatic()) {
 			populateConfigurationMapFromClosureExpression(classNode, mappingNode, propertyMappings);
@@ -144,7 +105,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 		injectVersionPropertyIfNecessary(classNode, propertyMappings);
 
 		// annotate properties listed in the mapping closure
-		String primaryKeyPropertyName = GrailsDomainClassProperty.IDENTITY;
+		String primaryKeyPropertyName = GormProperties.IDENTITY;
 		for (Entry<String, Map<String, ?>> mappingEntry : propertyMappings.entrySet()) {
 			String propertyName = mappingEntry.getKey();
 			final Map<String, ?> propertyConfig = mappingEntry.getValue();
@@ -153,7 +114,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 			Integer ordinal = null;
 			PrimaryKeyType primaryKeyType = PrimaryKeyType.PARTITIONED;
 			boolean annotatePrimaryKey = false;
-			if (propertyConfig.containsKey("name") && propertyName.equals(GrailsDomainClassProperty.IDENTITY)) {
+			if (propertyConfig.containsKey("name") && propertyName.equals(GormProperties.IDENTITY)) {
 				annotatePrimaryKey = true;
 				propertyName = propertyConfig.get("name").toString();
 				primaryKeyPropertyName = propertyName;
@@ -165,10 +126,10 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 				annotatePrimaryKey = true;
 				primaryKeyConfig = (Map) propertyConfig.get("primaryKey");
 				if (primaryKeyConfig.containsKey("ordinal")) {
-					ordinal = NumberUtils.toInt("" + primaryKeyConfig.get("ordinal"));
+					ordinal = StringGroovyMethods.toInteger("" + primaryKeyConfig.get("ordinal"));
 				}
 				if (primaryKeyConfig.containsKey("type")) {
-					primaryKeyType = EnumUtils.getEnum(PrimaryKeyType.class, primaryKeyConfig.get("type").toString().toUpperCase());
+					primaryKeyType = EnumUtil.findEnum(PrimaryKeyType.class, primaryKeyConfig.get("type").toString().toUpperCase());
 				}
 			}
 
@@ -189,7 +150,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 				}
 			}
 
-			if (propertyConfig.containsKey("index") && BooleanUtils.toBoolean(propertyConfig.get("index").toString())) {
+			if (propertyConfig.containsKey("index") && StringGroovyMethods.toBoolean(propertyConfig.get("index").toString())) {
 				annotateProperty(classNode, propertyName, Indexed.class);
 			}
 
@@ -297,8 +258,8 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 	}
 
 	private static void injectIdPropertyIfNecessary(ClassNode classNode, String primaryKeyPropertyName, boolean cassandraEntity) {
-		final boolean hasId = GrailsASTUtils.hasOrInheritsProperty(classNode, primaryKeyPropertyName);
-		ClassNode parent = GrailsASTUtils.getFurthestUnresolvedParent(classNode);
+		final boolean hasId = AstUtils.hasOrInheritsProperty(classNode, primaryKeyPropertyName);
+		ClassNode parent = AstUtils.getFurthestUnresolvedParent(classNode);
 
 		if (!hasId) {
 			// inject into furthest relative
@@ -313,13 +274,13 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 			if (cassandraEntity) {
 				ClassNode originalType = primaryKeyProperty.getType();
 				String type = originalType.getName();
-				if (primaryKeyPropertyName.equals(GrailsDomainClassProperty.IDENTITY) && ("long".equals(type) || "java.lang.Long".equals(type))) {
+				if (primaryKeyPropertyName.equals(GormProperties.IDENTITY) && ("long".equals(type) || "java.lang.Long".equals(type))) {
 					primaryKeyProperty.setType(new ClassNode(UUID.class));
-					MethodNode getter = classNode.getMethod(GrailsClassUtils.getGetterName(primaryKeyPropertyName), new Parameter[] {});
+					MethodNode getter = classNode.getMethod(NameUtils.getGetterName(primaryKeyPropertyName), new Parameter[] {});
 					if (getter != null) {
 						getter.setReturnType(new ClassNode(UUID.class));
 					}
-					MethodNode setter = classNode.getMethod(GrailsClassUtils.getSetterName(primaryKeyPropertyName), new Parameter[] { new Parameter(originalType, null) });
+					MethodNode setter = classNode.getMethod(NameUtils.getSetterName(primaryKeyPropertyName), new Parameter[] { new Parameter(originalType, null) });
 					if (setter != null) {
 						setter.setParameters(new Parameter[] { new Parameter(new ClassNode(UUID.class), setter.getParameters()[0].getName()) });
 					}
@@ -334,10 +295,10 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 		// For primary key property not named id, a primary key named id, of
 		// type long, may have been added by another AST which should not be
 		// persisted. So mark it as Transient, add one now if not present
-		if (!primaryKeyPropertyName.equals(GrailsDomainClassProperty.IDENTITY)) {
-			PropertyNode idProperty = classNode.getProperty(GrailsDomainClassProperty.IDENTITY);
+		if (!primaryKeyPropertyName.equals(GormProperties.IDENTITY)) {
+			PropertyNode idProperty = classNode.getProperty(GormProperties.IDENTITY);
 			if (idProperty == null) {
-				final FieldNode idField = new FieldNode(GrailsDomainClassProperty.IDENTITY, Modifier.PRIVATE | Modifier.TRANSIENT, new ClassNode(Long.class), parent.redirect(), new ConstantExpression(null));
+				final FieldNode idField = new FieldNode(GormProperties.IDENTITY, Modifier.PRIVATE | Modifier.TRANSIENT, new ClassNode(Long.class), parent.redirect(), new ConstantExpression(null));
 				idProperty = new PropertyNode(idField, Modifier.PRIVATE | Modifier.TRANSIENT, null, null);
 				parent.addProperty(idProperty);
 			}
@@ -345,7 +306,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 				String type = idProperty.getType().getName();
 				if ("long".equals(type) || "java.lang.Long".equals(type)) {
 					idProperty.getField().setModifiers(Modifier.PRIVATE | Modifier.TRANSIENT);
-					annotateProperty(classNode, GrailsDomainClassProperty.IDENTITY, createTransientAnnotationNode());
+					annotateProperty(classNode, GormProperties.IDENTITY, createTransientAnnotationNode());
 				}
 			}
 		}
@@ -357,18 +318,18 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 	 * not present, so it can be marked as Transient
 	 */
 	private static void injectVersionPropertyIfNecessary(ClassNode classNode, Map<String, Map<String, ?>> propertyMappings) {
-		final boolean hasVersion = GrailsASTUtils.hasOrInheritsProperty(classNode, GrailsDomainClassProperty.VERSION);
-		ClassNode parent = GrailsASTUtils.getFurthestUnresolvedParent(classNode);
+		final boolean hasVersion = AstUtils.hasOrInheritsProperty(classNode, GormProperties.VERSION);
+		ClassNode parent = AstUtils.getFurthestUnresolvedParent(classNode);
 
 		if (!hasVersion) {
 			// inject into furthest relative
-			parent.addProperty(GrailsDomainClassProperty.VERSION, Modifier.PUBLIC, new ClassNode(Long.class), null, null, null);
+			parent.addProperty(GormProperties.VERSION, Modifier.PUBLIC, new ClassNode(Long.class), null, null, null);
 		}
 
-		PropertyNode versionProperty = classNode.getProperty(GrailsDomainClassProperty.VERSION);
+		PropertyNode versionProperty = classNode.getProperty(GormProperties.VERSION);
 		if (versionProperty != null) {
-			if (propertyMappings.containsKey(GrailsDomainClassProperty.VERSION)) {
-				final Map<String, ?> versionSettings = propertyMappings.get(GrailsDomainClassProperty.VERSION);
+			if (propertyMappings.containsKey(GormProperties.VERSION)) {
+				final Map<String, ?> versionSettings = propertyMappings.get(GormProperties.VERSION);
 				final Object object = versionSettings.get("enabled");
 				if (object instanceof Boolean) {
 					if (!((Boolean) object).booleanValue()) {
@@ -381,7 +342,7 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 	}
 
 	private static void typeAnnotateProperties(ClassNode classNode) {
-		final PropertyNode transientsMapping = classNode.getProperty(GrailsDomainClassProperty.TRANSIENT);
+		final PropertyNode transientsMapping = classNode.getProperty(GormProperties.TRANSIENT);
 		List<String> transientPropertyNameList = new ArrayList<String>();
 		populateConstantList(transientPropertyNameList, transientsMapping);
 		annotateAllProperties(classNode, transientPropertyNameList, createTransientAnnotationNode());
@@ -592,5 +553,30 @@ public class GormToCassandraTransform implements GrailsDomainClassInjector, Grai
 			parent = parent.getSuperClass();
 		}
 		return false;
+	}
+
+	@Override
+	public boolean isAvailable() {
+		return org.grails.datastore.mapping.reflect.ClassUtils.isPresent("com.datastax.driver.core.DataType");
+	}
+
+	@Override
+	public void visit(ClassNode classNode, SourceUnit sourceUnit) {
+		if(shouldInjectClass(classNode)) {
+			performInjectionOnAnnotatedClass(sourceUnit, classNode);
+		}
+	}
+
+	@Override
+	public void setCompilationUnit(CompilationUnit unit) {
+		this.compilationUnit = unit;
+	}
+
+	@Override
+	public void visit(ASTNode[] astNodes, SourceUnit source) {
+		AnnotatedNode parent = (AnnotatedNode) astNodes[1];
+		ClassNode cNode = (ClassNode) parent;
+
+		visit(cNode, source);
 	}
 }

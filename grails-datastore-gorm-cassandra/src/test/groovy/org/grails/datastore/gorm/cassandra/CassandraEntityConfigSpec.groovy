@@ -78,8 +78,8 @@ class CassandraEntityConfigSpec extends Specification{
 			table != null
 			table.keyspace == keyspace		
 			table.hasCompositePrimaryKeys()
-			table.primaryKeys == [lastName, firstName, location]
-			table.primaryKeyNames == ["lastName", "firstName", "location"]
+			table.primaryKeys == [firstName, location, lastName]
+			table.primaryKeyNames == ["firstName", "location", "lastName"]
 			table.isPrimaryKey("lastName")
 			table.isPrimaryKey("firstName")
 			table.isPrimaryKey("location")

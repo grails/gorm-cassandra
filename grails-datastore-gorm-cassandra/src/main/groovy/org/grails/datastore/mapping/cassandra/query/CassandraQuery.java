@@ -137,7 +137,7 @@ public class CassandraQuery extends Query implements QueryArgumentsAware {
 		cassandraSession = session;
 		cassandraEntityPersister = (CassandraEntityPersister) cassandraSession.getPersister(entity);
 		cassandraTemplate = cassandraSession.getCassandraTemplate();
-		cassandraPersistentEntity = cassandraTemplate.getCassandraMappingContext().getPersistentEntity(entity.getJavaClass());
+		cassandraPersistentEntity = cassandraTemplate.getMappingContext().getPersistentEntity(entity.getJavaClass());
 		conversionService = cassandraTemplate.getConverter().getConversionService();
 	}
 
@@ -160,7 +160,7 @@ public class CassandraQuery extends Query implements QueryArgumentsAware {
 			throw new UnsupportedOperationException("Queries of type Disjunction (OR) are not supported by this implementation");
 		} else if (criteria instanceof Conjunction) {
 			final List<Projection> projectionList = projections().getProjectionList();
-			Select select = null;
+			Select select;
 			if (projectionList.isEmpty()) {
 				select = QueryBuilder.select().all().from(getTableName(entity));
 			} else {

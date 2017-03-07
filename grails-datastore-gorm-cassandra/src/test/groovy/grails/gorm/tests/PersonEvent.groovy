@@ -1,6 +1,7 @@
 package grails.gorm.tests
 
-import grails.persistence.Entity
+import grails.gorm.annotation.Entity
+
 
 @Entity
 class PersonEvent implements Serializable {
@@ -67,5 +68,9 @@ class PersonEvent implements Serializable {
     
     void setPersonService(java.lang.Object personService) {
         this.personService = personService
+    }
+
+    static mapping = {
+        autowire true
     }
 }

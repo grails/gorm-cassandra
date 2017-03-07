@@ -1,10 +1,14 @@
 package grails.gorm.tests
 
+import grails.gorm.validation.ConstrainedProperty
+import org.grails.datastore.gorm.validation.constraints.MappingContextAwareConstraintFactory
+import org.grails.datastore.gorm.validation.constraints.eval.DefaultConstraintEvaluator
+import org.grails.datastore.gorm.validation.constraints.registry.DefaultConstraintRegistry
+import org.grails.datastore.mapping.model.config.GormProperties
+import org.springframework.context.support.StaticMessageSource
 
 import javax.persistence.FlushModeType
 
-import org.codehaus.groovy.grails.commons.GrailsDomainConfigurationUtil
-import grails.validation.ConstrainedProperty
 import org.grails.datastore.gorm.validation.constraints.UniqueConstraint
 import org.grails.datastore.mapping.model.MappingContext
 import org.grails.datastore.mapping.model.PersistentEntity
@@ -108,17 +112,33 @@ class UniqueConstraintSpec extends GormDatastoreSpec {
 
         def groupValidator = [supports: {Class cls -> true},
             validate: {Object target, Errors errors ->
-                def constrainedProperties = GrailsDomainConfigurationUtil.evaluateConstraints(UniqueGroup)
+                def messageSource = new StaticMessageSource()
+                def registry = new DefaultConstraintRegistry(messageSource)
+                registry.addConstraintFactory(new MappingContextAwareConstraintFactory(org.grails.datastore.gorm.validation.constraints.builtin.UniqueConstraint.class, messageSource, session.datastore.mappingContext))
+                def evaluator = new DefaultConstraintEvaluator(registry, session.datastore.mappingContext, Collections.emptyMap())
+
+                def constrainedProperties = evaluator.evaluate(UniqueGroup)
                 for (ConstrainedProperty cp in constrainedProperties.values()) {
-                    cp.validate(target, target[cp.propertyName], errors)
+                    if(cp.propertyName != GormProperties.VERSION && cp.propertyName != GormProperties.IDENTITY) {
+                        cp.validate(target, target[cp.propertyName], errors)
+                    }
+
                 }
             }] as Validator
 
         def groupWithinValidator = [supports: {Class cls -> true},
             validate: {Object target, Errors errors ->
-                def constrainedProperties = GrailsDomainConfigurationUtil.evaluateConstraints(GroupWithin)
+                def messageSource = new StaticMessageSource()
+                def registry = new DefaultConstraintRegistry(messageSource)
+                registry.addConstraintFactory(new MappingContextAwareConstraintFactory(org.grails.datastore.gorm.validation.constraints.builtin.UniqueConstraint.class, messageSource, session.datastore.mappingContext))
+
+                def evaluator = new DefaultConstraintEvaluator(registry, session.datastore.mappingContext, Collections.emptyMap())
+
+                def constrainedProperties = evaluator.evaluate(GroupWithin)
                 for (ConstrainedProperty cp in constrainedProperties.values()) {
-                    cp.validate(target, target[cp.propertyName], errors)
+                    if(cp.propertyName != GormProperties.VERSION && cp.propertyName != GormProperties.IDENTITY) {
+                        cp.validate(target, target[cp.propertyName], errors)
+                    }
                 }
             }] as Validator
 

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.grails.datastore.mapping.config.Entity;
+import org.grails.datastore.mapping.config.Property;
 import org.grails.datastore.mapping.query.Query;
 
 /**
@@ -97,5 +98,10 @@ public class Table extends Entity {
 
 	public void setTableProperties(Map<String, Object> tableProperties) {
 		this.tableProperties = tableProperties;
+	}
+
+	@Override
+	protected Property newProperty() {
+		return new Column();
 	}
 }
