@@ -70,8 +70,6 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
 
     public static final String WRITE_OPTIONS = "writeOptions";
     private static Logger log = LoggerFactory.getLogger(CassandraDatastore.class);
-    // TODO make one keyspace for each session somehow, maybe just do a
-    // different datastore instance?
     public static final String DEFAULT_KEYSPACE = "CassandraKeySpace";
     public static final SchemaAction DEFAULT_SCHEMA_ACTION = SchemaAction.NONE;
     public static final String CONTACT_POINTS = "grails.cassandra.contactPoints";
@@ -85,6 +83,7 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
     public static final String KEYSPACE_REPLICATION_FACTOR = "grails.cassandra.keyspace.replicationFactor";
     public static final String KEYSPACE_REPLICATION_STRATEGY = "grails.cassandra.keyspace.replicationStrategy";
     public static final String KEYSPACE_NETWORK_TOPOLOGY = "grails.cassandra.keyspace.networkTopology";
+
     protected Cluster nativeCluster;
     protected com.datastax.driver.core.Session nativeSession;
     protected BasicCassandraMappingContext springCassandraMappingContext;

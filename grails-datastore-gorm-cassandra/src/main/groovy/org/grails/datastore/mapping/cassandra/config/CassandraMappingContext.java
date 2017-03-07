@@ -38,12 +38,22 @@ public class CassandraMappingContext extends AbstractMappingContext {
      *            The keyspace, this is typically the application name
      */
     public CassandraMappingContext(String keyspace, Closure defaultMapping) {
+        this(keyspace, defaultMapping, new Class[0]);
+    }
+
+    /**
+     * Constructs a context using the given keyspace
+     *
+     * @param keyspace
+     *            The keyspace, this is typically the application name
+     */
+    public CassandraMappingContext(String keyspace, Closure defaultMapping, Class...entities) {
         Assert.hasText(keyspace, "Property [keyspace] must be set!");
         this.keyspace = keyspace;
         this.defaultMapping = defaultMapping;
         mappingFactory = createMappingFactory();
         syntaxStrategy = new GormMappingConfigurationStrategy(mappingFactory);
-
+        addPersistentEntities(entities);
     }
 
     public Closure getDefaultMapping() {

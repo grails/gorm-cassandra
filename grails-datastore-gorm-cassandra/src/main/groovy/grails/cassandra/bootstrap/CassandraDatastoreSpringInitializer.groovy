@@ -26,6 +26,7 @@ import org.grails.datastore.gorm.cassandra.bean.factory.DefaultMappingHolder
 import org.grails.datastore.gorm.support.AbstractDatastorePersistenceContextInterceptor
 import org.grails.datastore.gorm.support.DatastorePersistenceContextInterceptor
 import org.grails.datastore.mapping.cassandra.CassandraDatastore
+import org.grails.datastore.mapping.cassandra.config.CassandraMappingContext
 import org.springframework.beans.factory.support.BeanDefinitionRegistry
 
 
@@ -61,15 +62,21 @@ class CassandraDatastoreSpringInitializer extends AbstractDatastoreInitializer {
             callable.delegate = delegate
             callable.call()
 
-            cassandraMappingContext(CassandraMappingContextFactoryBean) {
-                keyspace = keyspaceName
-                grailsApplication = ref('grailsApplication')
-                if (defaultMapping) {
-                    delegate.defaultMapping = new DefaultMappingHolder(defaultMapping)
+            if(isGrailsPresent()) {
+                cassandraMappingContext(CassandraMappingContextFactoryBean) {
+                    keyspace = keyspaceName
+                    grailsApplication = ref('grailsApplication')
+                    if (defaultMapping) {
+                        delegate.defaultMapping = new DefaultMappingHolder(defaultMapping)
+                    }
                 }
             }
+            else {
+                cassandraMappingContext(CassandraMappingContext, keyspaceName, defaultMapping, persistentClasses as Class[])
+            }
+
             cassandraDatastore(CassandraDatastoreFactoryBean) {
-                mappingContext = cassandraMappingContext
+                mappingContext = ref('cassandraMappingContext')
                 delegate.config = config
                 delegate.developmentMode = developmentMode
             }
@@ -79,12 +86,6 @@ class CassandraDatastoreSpringInitializer extends AbstractDatastoreInitializer {
             callable = getAdditionalBeansConfiguration(beanDefinitionRegistry, "cassandra")
             callable.delegate = delegate
             callable.call()
-
-            "org.grails.gorm.cassandra.internal.GORM_ENHANCER_BEAN-cassandra"(CassandraGormEnhancer, ref("cassandraDatastore"), ref("cassandraTransactionManager")) { bean ->
-                bean.initMethod = 'enhance'
-                bean.destroyMethod = 'close'
-                bean.lazyInit = false
-            }
         }
     }
 }
