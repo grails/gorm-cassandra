@@ -7,7 +7,9 @@ dependencyManagement {
     applyMavenExclusions false
 }
 
-
+configurations.all {
+    exclude module:'grails-datastore-simple'
+}
 dependencies {
 
     provided("org.grails:grails-core")
