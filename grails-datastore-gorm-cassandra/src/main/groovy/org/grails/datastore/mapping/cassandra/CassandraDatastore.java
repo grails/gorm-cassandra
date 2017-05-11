@@ -97,6 +97,7 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
     protected boolean developmentMode = false;
     protected final CassandraGormEnhancer gormEnhancer;
     protected final PlatformTransactionManager transactionManager;
+    protected final AutoTimestampEventListener autoTimestampEventListener;
 
     public CassandraDatastore() {
         this(new CassandraMappingContext(), Collections.<String, Object>emptyMap(), null);
@@ -125,7 +126,7 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
         this.transactionManager = datastoreTransactionManager;
         mappingContext.setSpringCassandraMappingContext(springCassandraMappingContext);
         mappingContext.addMappingContextListener(this);
-
+        this.autoTimestampEventListener = new AutoTimestampEventListener(this);
         initializeConverters(mappingContext);
         if(ctx != null) {
             registerEventListeners(new ConfigurableApplicationContextEventPublisher(ctx));
@@ -156,7 +157,7 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
 
     protected void registerEventListeners(ConfigurableApplicationEventPublisher eventPublisher) {
         eventPublisher.addApplicationListener(new DomainEventListener(this));
-        eventPublisher.addApplicationListener(new AutoTimestampEventListener(this));
+        eventPublisher.addApplicationListener(autoTimestampEventListener);
         eventPublisher.addApplicationListener(new ValidationEventListener(this));
     }
 
@@ -383,4 +384,6 @@ public class CassandraDatastore extends AbstractDatastore implements Initializin
     public PlatformTransactionManager getTransactionManager() {
         return this.transactionManager;
     }
+
+    public AutoTimestampEventListener getAutoTimestampEventListener() { return this.autoTimestampEventListener; }
 }
