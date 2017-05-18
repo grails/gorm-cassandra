@@ -83,6 +83,8 @@ class CassandraDatastoreSpringInitializer extends AbstractDatastoreInitializer {
 
             cassandraTemplate(cassandraDatastore : "getCassandraTemplate")
 
+            cassandraAutoTimestampEventListener(cassandraDatastore: "getAutoTimestampEventListener")
+
             callable = getAdditionalBeansConfiguration(beanDefinitionRegistry, "cassandra")
             callable.delegate = delegate
             callable.call()
