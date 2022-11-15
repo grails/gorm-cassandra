@@ -6,7 +6,7 @@ For more information see the following links:
 
 * [Documentation](http://gorm.grails.org/latest/cassandra/manual)
 * [API](http://gorm.grails.org/latest/cassandra/api)
-* [Grails Plugin](https://grails.org/plugins.html#plugin/cassandra)
+* [Grails Plugin](https://plugins.grails.org/plugin/grails/cassandra)
 * [![Build Status](https://travis-ci.org/grails/gorm-cassandra.svg?branch=master)](https://travis-ci.org/grails/gorm-cassandra)
 
 For the current development version see the following links:
